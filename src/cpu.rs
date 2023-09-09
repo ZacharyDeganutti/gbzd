@@ -1,12 +1,13 @@
-use std::mem;
-use std::slice;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-enum AddressMode {
-    Mode8,
-    Mode16,
-}
+use crate::memory_gb::Address;
+use crate::memory_gb::Single;
+use crate::memory_gb::Double;
+use crate::memory_gb::MemoryRegion;
+use crate::memory_gb::MemoryMap;
 
-pub enum Register8 {
+pub enum SingleRegister {
     RegA = 1,
     RegF = 0,
     RegB = 3,
@@ -17,7 +18,7 @@ pub enum Register8 {
     RegL = 6,
 }
 
-pub enum Register16 {
+pub enum DoubleRegister {
     RegAF = 0,
     RegBC = 1,
     RegDE = 2,
@@ -30,23 +31,24 @@ type Cost = u8;
 const TICK: Cost = 4;
 
 // RHS operand possibilities for 8 bit loads
-pub enum LD8Source {
-    RegisterValue(Register8),
-    FromRegisterAddress(Register16),
-    ImmediateValue(u8),
-    FromImmediateAddress(u16),
+pub enum LDSingleSource {
+    RegisterValue(SingleRegister),
+    FromRegisterAddress(DoubleRegister),
+    ImmediateValue(Single),
+    FromImmediateAddress(Address),
 }
 
 // LHS operand possibilities for 8 bit loads
-pub enum LD8Destination {
-    RegisterValue(Register8),
-    ToRegisterAddress(Register16),
-    ToImmediateAddress(u16),
+// TODO: Genericize this against MemoryUnit so that LD can be made generic against MemoryUnit
+pub enum LDSingleDestination {
+    RegisterValue(SingleRegister),
+    ToRegisterAddress(DoubleRegister),
+    ToImmediateAddress(Address),
 }
 
 #[repr(C)]
 pub struct RegisterBank {
-    f: u8,
+    f: Single,
     // Flag register
     // +-+-+-+-+-+-+-+-+
     // |7|6|5|4|3|2|1|0|
@@ -58,56 +60,45 @@ pub struct RegisterBank {
     // H: Half carry flag, set if a carry occurred from the lower nibble in the last math op
     // C: Carry flag, set if a carry occurred from the last math op or if register A is the smaller value when executing compare op
     // AF paired
-    pub a: u8,
+    pub a: Single,
     // Accumulator, typically used as destination for arithmetic ops
-    pub c: u8,
-    pub b: u8,
+    pub c: Single,
+    pub b: Single,
     // BC paired, general purpose registers
-    pub e: u8,
-    pub d: u8,
+    pub e: Single,
+    pub d: Single,
     // DE paired, general purpose registers
-    pub l: u8,
-    pub h: u8,
+    pub l: Single,
+    pub h: Single,
     // HL paired, general purpose registers that can point into memory
-    pub sp: u16, // Stack pointer,  initialized to 0xFFFE
-    pub pc: u16, // Program counter, initialized to 0x100
+    pub sp: Double, // Stack pointer,  initialized to 0xFFFE
+    pub pc: Double, // Program counter, initialized to 0x100
 }
 
-trait RegisterSize {}
-impl RegisterSize for u8 {}
-impl RegisterSize for u16 {}
-
+impl MemoryRegion for RegisterBank {}
 impl RegisterBank {
-    unsafe fn slice<T: RegisterSize>(&mut self) -> &mut [T] {
-        let ptr = mem::transmute::<&mut RegisterBank, *mut T>(self);
-        slice::from_raw_parts_mut(ptr, mem::size_of::<RegisterBank>() / mem::size_of::<T>())
+    pub fn read_single_register(&mut self, register: SingleRegister) -> Single {
+        unsafe { self.read::<Single>(register as Address) }
+    }
+    pub fn read_double_register(&mut self, register: DoubleRegister) -> Double {
+        unsafe { self.read::<Double>(register as Address) }
     }
 
-    pub fn read8(&mut self, register: Register8) -> u8 {
-        let slice = unsafe { self.slice::<u8>() };
-        slice[register as usize]
+    pub fn write_single_register(&mut self, register: SingleRegister, value: Single) -> () {
+        unsafe { self.write::<Single>(value, register as Address) }
     }
-    pub fn read16(&mut self, register: Register16) -> u16 {
-        let slice = unsafe { self.slice::<u16>() };
-        slice[register as usize]
-    }
-
-    pub fn write8(&mut self, register: Register8, value: u8) -> () {
-        let slice = unsafe { self.slice::<u8>() };
-        slice[register as usize] = value
-    }
-    pub fn write16(&mut self, register: Register16, value: u16) -> () {
-        let slice = unsafe { self.slice::<u16>() };
-        slice[register as usize] = value
+    pub fn write_double_register(&mut self, register: DoubleRegister, value: Double) -> () {
+        unsafe { self.write::<Double>(value, register as Address) }
     }
 }
 
 pub struct Cpu {
     pub registers: RegisterBank,
+    pub memory: Rc<RefCell<MemoryMap>>
 }
 
 impl Cpu {
-    pub fn new() -> Cpu {
+    pub fn new(system_memory: Rc<RefCell<MemoryMap>>) -> Cpu {
         let regs = RegisterBank {
             a: 0,
             f: 0,
@@ -120,32 +111,49 @@ impl Cpu {
             sp: 0,
             pc: 0,
         };
-        Cpu { registers: regs }
+        Cpu { 
+            registers: regs,
+            memory: system_memory
+        }
     }
 
-    pub fn ld8(&mut self, dest: LD8Destination, src: LD8Source) -> Cost {
-        let mut cost = TICK;
+    pub fn ld_single(&mut self, dest: LDSingleDestination, src: LDSingleSource) -> Cost {
+        let mut cost = TICK; // fetch
         let source_value = match src {
-            LD8Source::RegisterValue(register) => self.registers.read8(register),
-            LD8Source::FromRegisterAddress(register) => {
-                cost += TICK;
-                0
-            } // TODO: RAM fetch
-            LD8Source::ImmediateValue(value) => {
-                cost += TICK;
+            LDSingleSource::RegisterValue(register) => {
+                self.registers.read_single_register(register)
+            }
+            LDSingleSource::FromRegisterAddress(register) => {
+                cost += TICK; // read register address
+                let address = self.registers.read_double_register(register);
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.read::<Single>(address) }
+            } 
+            LDSingleSource::ImmediateValue(value) => {
+                cost += TICK; // read immediate value
                 value
             }
-            LD8Source::FromImmediateAddress(address) => {
-                cost += TICK * 3;
-                0
-            } // TODO: RAM fetch
+            LDSingleSource::FromImmediateAddress(address) => {
+                cost += TICK * 3; // read immediate upper, read immediate lower, read from address
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.read::<Single>(address) }
+            }
         };
         match dest {
-            LD8Destination::RegisterValue(register) => {
-                self.registers.write8(register, source_value)
+            LDSingleDestination::RegisterValue(register) => {
+                self.registers.write_single_register(register, source_value)
             }
-            LD8Destination::ToRegisterAddress(register) => cost += TICK,
-            LD8Destination::ToImmediateAddress(address) => cost += TICK * 3,
+            LDSingleDestination::ToRegisterAddress(register) => { 
+                cost += TICK; // write to register address
+                let address = self.registers.read_double_register(register);
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.write(source_value, address) }
+            }
+            LDSingleDestination::ToImmediateAddress(address) => {
+                cost += TICK * 3; // read immediate lower, read immediate upper, write to immediate address
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.write(source_value, address) }
+            }
         }
         cost
     }

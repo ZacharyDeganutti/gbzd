@@ -1,17 +1,21 @@
 mod cpu;
 mod memory_gb;
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 fn main() {
     println!("Hello, world!!");
-    let mut cpu = cpu::Cpu::new();
-    cpu.ld8(
-        cpu::LD8Destination::RegisterValue(cpu::Register8::RegA),
-        cpu::LD8Source::RegisterValue(cpu::Register8::RegE),
+    let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new()));
+    let mut cpu = cpu::Cpu::new(system_memory.clone());
+    cpu.ld_single(
+        cpu::LDSingleDestination::RegisterValue(cpu::SingleRegister::RegA),
+        cpu::LDSingleSource::RegisterValue(cpu::SingleRegister::RegE),
     );
     println!("{}", cpu.registers.a);
-    cpu.ld8(
-        cpu::LD8Destination::RegisterValue(cpu::Register8::RegH),
-        cpu::LD8Source::ImmediateValue(128),
+    cpu.ld_single(
+        cpu::LDSingleDestination::RegisterValue(cpu::SingleRegister::RegH),
+        cpu::LDSingleSource::ImmediateValue(128),
     );
     println!("{}", cpu.registers.h);
 }

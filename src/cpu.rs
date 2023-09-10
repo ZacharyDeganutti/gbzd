@@ -2,12 +2,12 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::memory_gb::Address;
-use crate::memory_gb::Single;
-use crate::memory_gb::Double;
+use crate::memory_gb::Byte;
+use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryMap;
 
-pub enum SingleRegister {
+pub enum ByteRegister {
     RegA = 1,
     RegF = 0,
     RegB = 3,
@@ -18,7 +18,7 @@ pub enum SingleRegister {
     RegL = 6,
 }
 
-pub enum DoubleRegister {
+pub enum WordRegister {
     RegAF = 0,
     RegBC = 1,
     RegDE = 2,
@@ -31,24 +31,37 @@ type Cost = u8;
 const TICK: Cost = 4;
 
 // RHS operand possibilities for 8 bit loads
-pub enum LDSingleSource {
-    RegisterValue(SingleRegister),
-    FromRegisterAddress(DoubleRegister),
-    ImmediateValue(Single),
+pub enum LDByteSource {
+    RegisterValue(ByteRegister),
+    FromRegisterAddress(WordRegister),
+    FromRegisterOffsetAddress(ByteRegister),
+    ImmediateValue(Byte),
     FromImmediateAddress(Address),
+    FromImmediateOffsetAddress(Byte),
+}
+// LHS operand possibilities for 8 bit loads
+pub enum LDByteDestination {
+    RegisterValue(ByteRegister),
+    ToRegisterAddress(WordRegister),
+    ToRegisterOffsetAddress(ByteRegister),
+    ToImmediateAddress(Address),
+    ToImmediateOffsetAddress(Byte),
 }
 
-// LHS operand possibilities for 8 bit loads
-// TODO: Genericize this against MemoryUnit so that LD can be made generic against MemoryUnit
-pub enum LDSingleDestination {
-    RegisterValue(SingleRegister),
-    ToRegisterAddress(DoubleRegister),
+// RHS operand possibilities for 16 bit loads
+pub enum LDWordSource {
+    RegisterValue(WordRegister),
+    ImmediateValue(Word),
+}
+// LHS operand possibilities for 16 bit loads
+pub enum LDWordDestination {
+    RegisterValue(WordRegister),
     ToImmediateAddress(Address),
 }
 
 #[repr(C)]
 pub struct RegisterBank {
-    f: Single,
+    f: Byte,
     // Flag register
     // +-+-+-+-+-+-+-+-+
     // |7|6|5|4|3|2|1|0|
@@ -60,35 +73,35 @@ pub struct RegisterBank {
     // H: Half carry flag, set if a carry occurred from the lower nibble in the last math op
     // C: Carry flag, set if a carry occurred from the last math op or if register A is the smaller value when executing compare op
     // AF paired
-    pub a: Single,
+    pub a: Byte,
     // Accumulator, typically used as destination for arithmetic ops
-    pub c: Single,
-    pub b: Single,
+    pub c: Byte,
+    pub b: Byte,
     // BC paired, general purpose registers
-    pub e: Single,
-    pub d: Single,
+    pub e: Byte,
+    pub d: Byte,
     // DE paired, general purpose registers
-    pub l: Single,
-    pub h: Single,
+    pub l: Byte,
+    pub h: Byte,
     // HL paired, general purpose registers that can point into memory
-    pub sp: Double, // Stack pointer,  initialized to 0xFFFE
-    pub pc: Double, // Program counter, initialized to 0x100
+    pub sp: Word, // Stack pointer,  initialized to 0xFFFE
+    pub pc: Word, // Program counter, initialized to 0x100
 }
 
 impl MemoryRegion for RegisterBank {}
 impl RegisterBank {
-    pub fn read_single_register(&mut self, register: SingleRegister) -> Single {
-        unsafe { self.read::<Single>(register as Address) }
+    pub fn read_byte_register(&mut self, register: ByteRegister) -> Byte {
+        unsafe { self.read::<Byte>(register as Address) }
     }
-    pub fn read_double_register(&mut self, register: DoubleRegister) -> Double {
-        unsafe { self.read::<Double>(register as Address) }
+    pub fn read_word_register(&mut self, register: WordRegister) -> Word {
+        unsafe { self.read::<Word>(register as Address) }
     }
 
-    pub fn write_single_register(&mut self, register: SingleRegister, value: Single) -> () {
-        unsafe { self.write::<Single>(value, register as Address) }
+    pub fn write_byte_register(&mut self, register: ByteRegister, value: Byte) -> () {
+        unsafe { self.write::<Byte>(value, register as Address) }
     }
-    pub fn write_double_register(&mut self, register: DoubleRegister, value: Double) -> () {
-        unsafe { self.write::<Double>(value, register as Address) }
+    pub fn write_word_register(&mut self, register: WordRegister, value: Word) -> () {
+        unsafe { self.write::<Word>(value, register as Address) }
     }
 }
 
@@ -108,7 +121,7 @@ impl Cpu {
             e: 32,
             h: 0,
             l: 0,
-            sp: 0,
+            sp: 0xFFFE,
             pc: 0,
         };
         Cpu { 
@@ -117,40 +130,95 @@ impl Cpu {
         }
     }
 
-    pub fn ld_single(&mut self, dest: LDSingleDestination, src: LDSingleSource) -> Cost {
+    pub fn ld_byte(&mut self, dest: LDByteDestination, src: LDByteSource) -> Cost {
         let mut cost = TICK; // fetch
         let source_value = match src {
-            LDSingleSource::RegisterValue(register) => {
-                self.registers.read_single_register(register)
+            LDByteSource::RegisterValue(register) => {
+                self.registers.read_byte_register(register)
             }
-            LDSingleSource::FromRegisterAddress(register) => {
+            LDByteSource::FromRegisterAddress(register) => {
                 cost += TICK; // read register address
-                let address = self.registers.read_double_register(register);
+                let address = self.registers.read_word_register(register);
                 let mut map = self.memory.borrow_mut();
-                unsafe { map.read::<Single>(address) }
+                unsafe { map.read::<Byte>(address) }
             } 
-            LDSingleSource::ImmediateValue(value) => {
+            LDByteSource::FromRegisterOffsetAddress(register) => {
+                cost += TICK; // read register offset address
+                let offset = self.registers.read_byte_register(register);
+                let address = 0xFF00 + offset as Address;
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.read::<Byte>(address) }
+            }
+            LDByteSource::ImmediateValue(value) => {
                 cost += TICK; // read immediate value
                 value
             }
-            LDSingleSource::FromImmediateAddress(address) => {
+            LDByteSource::FromImmediateAddress(address) => {
                 cost += TICK * 3; // read immediate upper, read immediate lower, read from address
                 let mut map = self.memory.borrow_mut();
-                unsafe { map.read::<Single>(address) }
+                unsafe { map.read::<Byte>(address) }
+            }
+            LDByteSource::FromImmediateOffsetAddress(offset) => {
+                cost += TICK * 2; // read immediate, read offset address
+                let address = 0xFF00 + offset as Address;
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.read::<Byte>(address) }
             }
         };
         match dest {
-            LDSingleDestination::RegisterValue(register) => {
-                self.registers.write_single_register(register, source_value)
+            LDByteDestination::RegisterValue(register) => {
+                self.registers.write_byte_register(register, source_value)
             }
-            LDSingleDestination::ToRegisterAddress(register) => { 
+            LDByteDestination::ToRegisterAddress(register) => { 
                 cost += TICK; // write to register address
-                let address = self.registers.read_double_register(register);
+                let address = self.registers.read_word_register(register);
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }
-            LDSingleDestination::ToImmediateAddress(address) => {
+            LDByteDestination::ToRegisterOffsetAddress(register) => {
+                cost += TICK; // write offset address
+                let offset = self.registers.read_byte_register(register) as Address;
+                let address = 0xFF00 + offset;
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.write(source_value, address) }
+            }
+            LDByteDestination::ToImmediateAddress(address) => {
                 cost += TICK * 3; // read immediate lower, read immediate upper, write to immediate address
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.write(source_value, address) }
+            }
+            LDByteDestination::ToImmediateOffsetAddress(offset) => {
+                cost += TICK * 2; // read immediate, write offset address
+                let address = 0xFF00 + offset as Address;
+                let mut map = self.memory.borrow_mut();
+                unsafe { map.write(source_value, address) }
+            }
+        }
+        cost
+    }
+
+    pub fn ld_word(&mut self, dest: LDWordDestination, src: LDWordSource) -> Cost {
+        let mut cost = TICK; // fetch
+        let mut register_sourced = false;
+        let source_value = match src {
+            LDWordSource::RegisterValue(register) => {
+                register_sourced = true;
+                self.registers.read_word_register(register)
+            }
+            LDWordSource::ImmediateValue(value) => {
+                cost += TICK * 2; // read low byte, read high byte
+                value
+            }
+        };
+        match dest {
+            LDWordDestination::RegisterValue(register) => {
+                // Word register to Word register copying has an intrinsic 1 tick cost
+                // Needs special case because loading immediate Word to registers is equivalent to loading 2 Bytes
+                cost += if register_sourced { TICK } else { 0 };
+                self.registers.write_word_register(register, source_value)
+            }
+            LDWordDestination::ToImmediateAddress(address) => {
+                cost += TICK * 4; // read immediate lower, read immediate upper, write to immediate address, write to immediate address + 1
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }

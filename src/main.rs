@@ -9,13 +9,13 @@ fn main() {
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new()));
     let mut cpu = cpu::Cpu::new(system_memory.clone());
     cpu.ld_byte(
-        cpu::LDByteDestination::RegisterValue(cpu::ByteRegister::RegA),
-        cpu::LDByteSource::RegisterValue(cpu::ByteRegister::RegE),
+        cpu::ByteDestination::RegisterValue(cpu::ByteRegister::RegA),
+        cpu::ByteSource::RegisterValue(cpu::ByteRegister::RegE),
     );
     println!("{}", cpu.registers.a);
     cpu.ld_byte(
-        cpu::LDByteDestination::RegisterValue(cpu::ByteRegister::RegH),
-        cpu::LDByteSource::ImmediateValue(128),
+        cpu::ByteDestination::RegisterValue(cpu::ByteRegister::RegH),
+        cpu::ByteSource::ImmediateValue(128),
     );
     println!("{}", cpu.registers.h);
 }

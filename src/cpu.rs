@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -8,6 +9,14 @@ use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryMap;
 
+/* Semantics notes
+*   Callers of operations are responsible for tracking timing since calls are case by case anyway
+*   Attempting to generalize the what and why of how costs accumulate leads to unreasonable code complexity
+*   All we need is the number at the end of the day. 
+*   Opcodes with costs dependent on branching should report whether they branched or not, and the caller decides the cost
+*/
+
+#[derive(Clone, Copy)]
 pub enum ByteRegister {
     RegA = 1,
     RegF = 0,
@@ -19,6 +28,7 @@ pub enum ByteRegister {
     RegL = 6,
 }
 
+#[derive(Clone, Copy)]
 pub enum WordRegister {
     RegAF = 0,
     RegBC = 1,
@@ -31,15 +41,104 @@ pub enum WordRegister {
 type Cost = u8;
 const TICK: Cost = 4;
 
-// Source operand possibilities for 8 bit operations
-pub enum ByteSource {
-    RegisterValue(ByteRegister),
-    FromRegisterAddress(WordRegister),
-    FromRegisterOffsetAddress(ByteRegister),
-    ImmediateValue(Byte),
-    FromImmediateAddress(Address),
-    FromImmediateOffsetAddress(Byte),
+type MemoryMapRef = Rc<RefCell<MemoryMap>>;
+
+pub trait ReadByte {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte;
 }
+
+pub struct RegisterValue {
+    register: ByteRegister,
+}
+impl ReadByte for RegisterValue {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+        cpu.registers.read_byte(self.register)
+    }
+}
+impl RegisterValue {
+    pub fn new(register: ByteRegister) -> RegisterValue {
+        RegisterValue { register: register }
+    }
+}
+
+pub struct RegisterIndirect {
+    register: WordRegister,
+}
+impl ReadByte for RegisterIndirect {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+        let address = cpu.registers.read_word(self.register);
+        let mut map = cpu.memory.borrow_mut();
+        unsafe { map.read::<Byte>(address) }
+    }
+}
+impl RegisterIndirect {
+    pub fn new(register: WordRegister) -> RegisterIndirect {
+        RegisterIndirect { register: register }
+    }
+}
+
+pub struct RegisterOffsetIndirect {
+    register: ByteRegister,
+}
+impl ReadByte for RegisterOffsetIndirect {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+        let offset = cpu.registers.read_byte(self.register);
+        let address = 0xFF00 + offset as Address;
+        let mut map = cpu.memory.borrow_mut();
+        unsafe { map.read::<Byte>(address) }
+    }
+}
+impl RegisterOffsetIndirect {
+    pub fn new(register: ByteRegister) -> RegisterOffsetIndirect {
+        RegisterOffsetIndirect { register: register }
+    }
+}
+
+pub struct ImmediateValue {
+    data: Byte,
+}
+impl ReadByte for ImmediateValue {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+        self.data
+    }
+}
+impl ImmediateValue {
+    pub fn new(value: Byte) -> ImmediateValue {
+        ImmediateValue{ data: value }
+    }
+}
+
+pub struct ImmediateIndirect {
+    address: Address,
+}
+impl ReadByte for ImmediateIndirect {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+        let mut map = cpu.memory.borrow_mut();
+        unsafe { map.read::<Byte>(self.address) } 
+    }
+}
+impl ImmediateIndirect {
+    pub fn fetch(address: Address) -> ImmediateIndirect {
+        ImmediateIndirect{ address: address }
+    }
+}
+
+pub struct ImmediateOffsetIndirect {
+    offset: Byte,
+}
+impl ReadByte for ImmediateOffsetIndirect {
+    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+        let address = 0xFF00 + self.offset as Address;
+        let mut map = cpu.memory.borrow_mut();
+        unsafe { map.read::<Byte>(address) }
+    }
+}
+impl ImmediateOffsetIndirect {
+    pub fn fetch(offset: Byte, memory: MemoryMapRef) -> ImmediateOffsetIndirect {
+        ImmediateOffsetIndirect{ offset: offset }
+    }
+}
+
 // Destination operand possibilities for 8 bit operations
 pub enum ByteDestination {
     RegisterValue(ByteRegister),
@@ -163,75 +262,36 @@ impl Cpu {
         }
     }
 
-    pub fn ld_byte(&mut self, dest: ByteDestination, src: ByteSource) -> Cost {
-        let mut cost = TICK; // fetch
-        let source_value = match src {
-            ByteSource::RegisterValue(register) => {
-                self.registers.read_byte(register)
-            }
-            ByteSource::FromRegisterAddress(register) => {
-                cost += TICK; // read register address
-                let address = self.registers.read_word(register);
-                let mut map = self.memory.borrow_mut();
-                unsafe { map.read::<Byte>(address) }
-            } 
-            ByteSource::FromRegisterOffsetAddress(register) => {
-                cost += TICK; // read register offset address
-                let offset = self.registers.read_byte(register);
-                let address = 0xFF00 + offset as Address;
-                let mut map = self.memory.borrow_mut();
-                unsafe { map.read::<Byte>(address) }
-            }
-            ByteSource::ImmediateValue(value) => {
-                cost += TICK; // read immediate value
-                value
-            }
-            ByteSource::FromImmediateAddress(address) => {
-                cost += TICK * 3; // read immediate upper, read immediate lower, read from address
-                let mut map = self.memory.borrow_mut();
-                unsafe { map.read::<Byte>(address) }
-            }
-            ByteSource::FromImmediateOffsetAddress(offset) => {
-                cost += TICK * 2; // read immediate, read offset address
-                let address = 0xFF00 + offset as Address;
-                let mut map = self.memory.borrow_mut();
-                unsafe { map.read::<Byte>(address) }
-            }
-        };
+    pub fn ld_byte<T: ReadByte>(&mut self, dest: ByteDestination, src: T) {
+        let source_value = src.read_byte(self);
         match dest {
             ByteDestination::RegisterValue(register) => {
                 self.registers.write_byte(register, source_value)
             }
             ByteDestination::ToRegisterAddress(register) => { 
-                cost += TICK; // write to register address
                 let address = self.registers.read_word(register);
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }
             ByteDestination::ToRegisterOffsetAddress(register) => {
-                cost += TICK; // write offset address
                 let offset = self.registers.read_byte(register) as Address;
                 let address = 0xFF00 + offset;
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }
             ByteDestination::ToImmediateAddress(address) => {
-                cost += TICK * 3; // read immediate lower, read immediate upper, write to immediate address
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }
             ByteDestination::ToImmediateOffsetAddress(offset) => {
-                cost += TICK * 2; // read immediate, write offset address
                 let address = 0xFF00 + offset as Address;
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }
         }
-        cost
     }
 
-    pub fn ld_word(&mut self, dest: WordDestination, src: WordSource) -> Cost {
-        let mut cost = TICK; // fetch
+    pub fn ld_word(&mut self, dest: WordDestination, src: WordSource) {
         let mut register_sourced = false;
         let source_value = match src {
             WordSource::RegisterValue(register) => {
@@ -239,28 +299,21 @@ impl Cpu {
                 self.registers.read_word(register)
             }
             WordSource::ImmediateValue(value) => {
-                cost += TICK * 2; // read low byte, read high byte
                 value
             }
         };
         match dest {
             WordDestination::RegisterValue(register) => {
-                // Word register to Word register copying has an intrinsic 1 tick cost
-                // Needs special case because loading immediate Word to registers is equivalent to loading 2 Bytes
-                cost += if register_sourced { TICK } else { 0 };
                 self.registers.write_word(register, source_value)
             }
             WordDestination::ToImmediateAddress(address) => {
-                cost += TICK * 4; // read immediate lower, read immediate upper, write to immediate address, write to immediate address + 1
                 let mut map = self.memory.borrow_mut();
                 unsafe { map.write(source_value, address) }
             }
         }
-        cost
     }
 
-    pub fn push(&mut self, register: WordRegister) -> Cost {
-        let cost = TICK * 4; // fetch, internal, write high, write low
+    pub fn push(&mut self, register: WordRegister) {
         // self.registers.sp = (self.registers.sp.from_gb_endian() - 2).to_gb_endian();
         let new_stack_pointer = self.registers.read_word(WordRegister::RegSP) - 2;
         self.registers.write_word(WordRegister::RegSP, new_stack_pointer);
@@ -269,11 +322,9 @@ impl Cpu {
         let mut map = self.memory.borrow_mut();
         unsafe { map.write(contents, address) };
         self.registers.write_word(WordRegister::RegSP, new_stack_pointer);
-        cost
     }
 
-    pub fn pop(&mut self, register: WordRegister) -> Cost {
-        let cost = TICK * 3; // fetch, read low, read high
+    pub fn pop(&mut self, register: WordRegister) {
         let address = self.registers.read_word(WordRegister::RegSP);
         let mut map = self.memory.borrow_mut();
         let contents = unsafe { map.read(address) };
@@ -287,38 +338,12 @@ impl Cpu {
             }
         }
         self.registers.write_word(WordRegister::RegSP, address + 2);
-        cost
     }
 
-    fn extract_arithmetic_operand(&mut self, src: ByteSource) -> (Cost, Byte) {
-        let mut cost = 0;
-        let extracted = match src {
-            ByteSource::RegisterValue(register) => {
-                self.registers.read_byte(register)
-            }
-            ByteSource::FromRegisterAddress(register) => {
-                cost += TICK;
-                let mut map = self.memory.borrow_mut();
-                let address = self.registers.read_word(register);
-                unsafe { map.read::<Byte>(address) } 
-            }
-            ByteSource::ImmediateValue(value) => {
-                cost += TICK;
-                value
-            }
-            _ => {
-                panic!("Invalid source operand type for add_byte")
-            }
-        };
-        (cost, extracted)
-    }
-
-    pub fn add_byte(&mut self, src: ByteSource, with_carry: bool) -> Cost {
+    pub fn add_byte<T: ReadByte>(&mut self, src: T, with_carry: bool) {
         let mut cost = TICK; // fetch
         let lhs: u16 = self.registers.read_byte(ByteRegister::RegA) as u16;
-        let (extraction_cost, rhs_original) = self.extract_arithmetic_operand(src);
-        cost += extraction_cost;
-        let rhs = rhs_original as u16;
+        let rhs = src.read_byte(self) as u16;
 
         let prior_carry = if with_carry { self.registers.check_flag(Flags::C) as u16 } else { 0 };
         let result = lhs + rhs + prior_carry;
@@ -331,15 +356,12 @@ impl Cpu {
         self.registers.set_flag(Flags::C, carry);
 
         self.registers.write_byte(ByteRegister::RegA, result as Byte);
-        cost
     }
 
-    fn general_sub_byte(&mut self, src:ByteSource, with_carry: bool) -> (Byte, Cost) {
+    fn general_sub_byte<T: ReadByte>(&mut self, src:T, with_carry: bool) -> Byte {
         let mut cost = TICK; // fetch
         let lhs: u16 = ( self.registers.read_byte(ByteRegister::RegA) as u16 ) << 8;
-        let (extraction_cost, rhs_original) = self.extract_arithmetic_operand(src);
-        cost += extraction_cost;
-        let rhs = (rhs_original as u16) << 8;
+        let rhs = (src.read_byte(self) as u16) << 8;
 
         let prior_carry = if with_carry { self.registers.check_flag(Flags::C) as u16 } else { 0 };
         let result = lhs - rhs - prior_carry;
@@ -352,25 +374,21 @@ impl Cpu {
         self.registers.set_flag(Flags::C, carry);
 
         
-        ((result >> 8) as Byte, cost)
+        (result >> 8) as Byte
     }
 
-    pub fn sub_byte(&mut self, src: ByteSource, with_carry: bool) -> Cost {
-        let (result, cost) = self.general_sub_byte(src, with_carry);
+    pub fn sub_byte<T: ReadByte>(&mut self, src: T, with_carry: bool) {
+        let result = self.general_sub_byte(src, with_carry);
         self.registers.write_byte(ByteRegister::RegA, result);
-        cost
     }
 
-    pub fn cp_op(&mut self, src: ByteSource) -> Cost {
-        let (result, cost) = self.general_sub_byte(src, false);
-        cost
+    pub fn cp_op<T: ReadByte>(&mut self, src: T) {
+        let result = self.general_sub_byte(src, false);
     }
 
-    pub fn and_op(&mut self, src: ByteSource) -> Cost {
-        let mut cost = TICK;
+    pub fn and_op<T: ReadByte>(&mut self, src: T) {
         let lhs = self.registers.read_byte(ByteRegister::RegA);
-        let (extraction_cost, rhs) = self.extract_arithmetic_operand(src);
-        cost += extraction_cost;
+        let rhs = src.read_byte(self);
         
         let result = lhs & rhs;
 
@@ -378,15 +396,11 @@ impl Cpu {
         self.registers.set_flag_off(Flags::N);
         self.registers.set_flag_on(Flags::H);
         self.registers.set_flag_off(Flags::C);
-
-        return cost
     }
 
-    pub fn or_op(&mut self, src: ByteSource) -> Cost {
-        let mut cost = TICK;
+    pub fn or_op<T: ReadByte>(&mut self, src: T) {
         let lhs = self.registers.read_byte(ByteRegister::RegA);
-        let (extraction_cost, rhs) = self.extract_arithmetic_operand(src);
-        cost += extraction_cost;
+        let rhs = src.read_byte(self);
         
         let result = lhs | rhs;
 
@@ -394,15 +408,11 @@ impl Cpu {
         self.registers.set_flag_off(Flags::N);
         self.registers.set_flag_off(Flags::H);
         self.registers.set_flag_off(Flags::C);
-
-        return cost
     }
 
-    pub fn xor_op(&mut self, src: ByteSource) -> Cost {
-        let mut cost = TICK;
+    pub fn xor_op<T: ReadByte>(&mut self, src: T) {
         let lhs = self.registers.read_byte(ByteRegister::RegA);
-        let (extraction_cost, rhs) = self.extract_arithmetic_operand(src);
-        cost += extraction_cost;
+        let rhs = src.read_byte(self);
         
         let result = lhs ^ rhs;
 
@@ -410,7 +420,5 @@ impl Cpu {
         self.registers.set_flag_off(Flags::N);
         self.registers.set_flag_off(Flags::H);
         self.registers.set_flag_off(Flags::C);
-
-        return cost
     }
 }

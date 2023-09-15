@@ -10,12 +10,12 @@ fn main() {
     let mut cpu = cpu::Cpu::new(system_memory.clone());
     cpu.ld_byte(
         cpu::ByteDestination::RegisterValue(cpu::ByteRegister::RegA),
-        cpu::ByteSource::RegisterValue(cpu::ByteRegister::RegE),
+        cpu::RegisterValue::new(cpu::ByteRegister::RegE)
     );
     println!("{}", cpu.registers.a);
     cpu.ld_byte(
         cpu::ByteDestination::RegisterValue(cpu::ByteRegister::RegH),
-        cpu::ByteSource::ImmediateValue(128),
+        cpu::ImmediateValue::new(128),
     );
     println!("{}", cpu.registers.h);
 }

@@ -5,12 +5,23 @@ const MAP_SIZE: usize = 0x10000;
 
 pub type Byte = u8;
 pub type Word = u16;
+pub type Signed = i8;
 
 pub type Address = Word;
 
 #[repr(C)]
 pub struct MemoryMap {
     memory: [Byte; MAP_SIZE]
+}
+
+pub trait ByteExt : {
+    fn interpret_as_signed(self) -> Signed;
+}
+
+impl ByteExt for Byte {
+    fn interpret_as_signed(self) -> Signed {
+        unsafe { i8::from_le_bytes(mem::transmute::<u8, [u8; 1]>(self)) }
+    }
 }
 
 pub trait EndianTranslate: Copy + Sized {

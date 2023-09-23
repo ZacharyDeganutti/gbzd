@@ -5,7 +5,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 fn main() {
-    println!("Hello, world!!");
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new()));
     let mut cpu = cpu::Cpu::new(system_memory.clone());
     cpu.ld_byte_op(
@@ -17,5 +16,6 @@ fn main() {
         cpu::ByteRegister::new(cpu::ByteRegisterName::RegH),
         cpu::ByteImmediate::new(128),
     );
+    cpu.inc_byte_op(cpu::ByteRegister::new(cpu::ByteRegisterName::RegH));
     println!("{}", cpu.registers.h);
 }

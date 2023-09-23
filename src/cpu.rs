@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::io::Read;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -585,6 +586,162 @@ impl Cpu {
     pub fn rst_op(&mut self, address: Address) {
         self.push_op(WordRegisterName::RegPC);
         self.registers.write_word(WordRegisterName::RegPC, address)
+    }
+
+    pub fn cpl_op(&mut self) {
+        let a_original = self.registers.read_byte(ByteRegisterName::RegA);
+        self.registers.set_flag_on(Flags::N);
+        self.registers.set_flag_on(Flags::H);
+
+        self.registers.write_byte(ByteRegisterName::RegA, !a_original);
+    }
+
+    pub fn ccf_op(&mut self) {
+        let carry = self.registers.check_flag(Flags::C);
+
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        
+        self.registers.set_flag(Flags::C, !carry);
+        
+    }
+
+    pub fn rl_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let end = original_value >> 7;
+        let original_carry = self.registers.check_flag(Flags::C) as u8;
+
+        let new_value = original_carry | (original_value << 1);
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn rr_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let end = original_value & 1;
+        let original_carry = self.registers.check_flag(Flags::C) as u8;
+
+        let new_value = (original_carry << 7) | (original_value >> 1);
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn rlc_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let end = original_value >> 7;
+
+        let new_value = end | (original_value << 1);
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn rrc_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let end = original_value & 1;
+
+        let new_value = (end << 7) | (original_value >> 1);
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn sla_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let end = original_value >> 7;
+
+        let new_value = original_value << 1;
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn srl_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let end = original_value & 1;
+
+        let new_value = original_value >> 1;
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn sra_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let msb = original_value & 0x80;
+        let end = original_value & 1;
+
+        let new_value = msb | (original_value >> 1);
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, end > 0);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn swap_op<T: ReadByte + WriteByte>(&mut self, item: T) {
+        let original_value = item.read_byte(self);
+        let high = original_value & 0xF0;
+        let low = original_value & 0xF;
+
+        let new_value = (low << 4) | high;
+
+        self.registers.set_flag(Flags::Z, new_value == 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag_off(Flags::C);
+
+        item.write_byte(self, new_value);
+    }
+
+    pub fn bit_op<T: ReadByte>(&mut self, bit_position: u8, item: T) {
+        let value = item.read_byte(self) | (1 << bit_position);
+
+        self.registers.set_flag(Flags::Z, value > 0);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_on(Flags::H);
+    }
+
+    pub fn res_op<T: ReadByte + WriteByte>(&mut self, bit_position: u8, item: T) {
+        let value = item.read_byte(self);
+        let mask = !(1 << bit_position);
+
+        item.write_byte(self, value & mask);
+    }
+
+    pub fn set_op<T: ReadByte + WriteByte>(&mut self, bit_position: u8, item: T) {
+        let value = item.read_byte(self);
+        let mask = 1 << bit_position;
+
+        item.write_byte(self, value | mask);
     }
 
 }

@@ -54,6 +54,9 @@ impl MemoryUnit for Word {}
 //      These can be presumed safe only if the MemoryRegion is equal in size to the Address space of 0x10000
 //      Where are my dependent types?
 pub trait MemoryRegion: Sized {
+    // TODO: fix garbage abstraction, can't assume Words will be Word-aligned
+    // Don't do this reinterpreting nonsense, simply create read/write byte/word like in other places
+    // Write read/write word in terms of reading 2 bytes
     unsafe fn interpret_as<T: MemoryUnit>(&mut self) -> &mut [T] {
         let ptr = mem::transmute::<&mut Self, *mut T>(self);
         slice::from_raw_parts_mut(ptr, mem::size_of::<Self>() / mem::size_of::<T>())

@@ -1,11 +1,13 @@
-mod cpu;
+mod cpu {
+    pub mod cpu;
+    pub mod cpu_ops;
+    pub mod cpu_execute;
+}
 mod memory_gb;
-mod cpu_ops;
-mod cpu_execute;
 
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::cpu::*;
+use crate::cpu;
 
 fn main() {
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new()));

@@ -3,7 +3,7 @@ use crate::memory_gb::Byte;
 use crate::memory_gb::Signed;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
-use crate::cpu::*;
+use crate::processor::cpu::*;
 
 
 impl Cpu {

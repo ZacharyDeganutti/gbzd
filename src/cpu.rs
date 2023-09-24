@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::EndianTranslate;
+use crate::memory_gb::Signed;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryMap;
@@ -376,7 +377,33 @@ impl Cpu {
         dest.write_byte(self, source_value);
     }
 
-    // TODO: Implement an extended ld_byte that handles the increment/decrement HL variant
+    // Indirect load from register A into address in register HL. Increment HL afterwards
+    pub fn ld_byte_0x22_op(&mut self) {
+        self.ld_byte_op(ByteRegisterIndirect::new(WordRegisterName::RegHL), ByteRegister::new(ByteRegisterName::RegA));
+        let pre_increment = self.registers.read_word(WordRegisterName::RegHL);
+        self.registers.write_word(WordRegisterName::RegHL, pre_increment + 1);
+    }
+
+    // Indirect load from address in register HL into register A. Increment HL afterwards
+    pub fn ld_byte_0x2a_op(&mut self) {
+        self.ld_byte_op(ByteRegister::new(ByteRegisterName::RegA), ByteRegisterIndirect::new(WordRegisterName::RegHL));
+        let pre_increment = self.registers.read_word(WordRegisterName::RegHL);
+        self.registers.write_word(WordRegisterName::RegHL, pre_increment + 1);
+    }
+
+    // Indirect load from register A into address in register HL. Decrement HL afterwards
+    pub fn ld_byte_0x32_op(&mut self) {
+        self.ld_byte_op(ByteRegisterIndirect::new(WordRegisterName::RegHL), ByteRegister::new(ByteRegisterName::RegA));
+        let pre_decrement = self.registers.read_word(WordRegisterName::RegHL);
+        self.registers.write_word(WordRegisterName::RegHL, pre_decrement - 1);
+    }
+
+    // Indirect load from address in register HL into register A. Decrement HL afterwards
+    pub fn ld_byte_0x3a_op(&mut self) {
+        self.ld_byte_op(ByteRegister::new(ByteRegisterName::RegA), ByteRegisterIndirect::new(WordRegisterName::RegHL));
+        let pre_decrement = self.registers.read_word(WordRegisterName::RegHL);
+        self.registers.write_word(WordRegisterName::RegHL, pre_decrement - 1);
+    }
 
     pub fn ld_word_op<T: WriteWord, U: ReadWord>(&mut self, dest: T, src: U) {
         let source_value = src.read_word(self);
@@ -440,6 +467,54 @@ impl Cpu {
         self.registers.set_flag(Flags::C, carry);
 
         self.registers.write_byte(ByteRegisterName::RegA, result);
+    }
+
+    // 0xE8 and 0xF8 are really the same operation with different destinations (HL/SP), so no duplication
+    pub fn add_sp_i8_op(&mut self, destination: WordRegisterName, offset: Signed) {
+        let sp_value = self.registers.read_word(WordRegisterName::RegSP);
+        let sp_upper = (sp_value & 0xFF00);
+        let sp_lower = (sp_value & 0x00FF);
+        let abs_offset = offset.abs() as Byte;
+        let (sum, half_carry, carry) = if offset < 0 {
+            let (result, _, _, half_carry, carry) = self.byte_subtraction(sp_lower as Byte, abs_offset, false);
+            let sum = (sp_upper - (carry as u16)) | (result as u16);
+            (sum, half_carry, carry)
+        } else {
+            let (result, _, _, half_carry, carry) = self.byte_addition(sp_lower as Byte, abs_offset, false);
+            let sum = (sp_upper + (carry as u16)) | (result as u16);
+            (sum, half_carry, carry)
+        };
+
+        self.registers.set_flag_off(Flags::Z);
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag(Flags::H, half_carry);
+        self.registers.set_flag(Flags::C, carry);
+
+        self.registers.write_word(destination, sum);
+    }
+
+    pub fn add_hl_word_op<T: ReadWord>(&mut self, operand: T) {
+        let lhs = self.registers.read_word(WordRegisterName::RegHL);
+        let rhs = operand.read_word(self);
+        let lhs_lower = (lhs & 0x00FF) as Byte;
+        let lhs_upper = ((lhs & 0xFF00) >> 4) as Byte;
+        let rhs_lower = (rhs & 0x00FF) as Byte;
+        let rhs_upper = ((rhs & 0xFF00) >> 4) as Byte;
+
+        let (lower_sum, _, _, lower_half_carry, lower_carry) = self.byte_addition(lhs_lower, rhs_lower, false);
+
+        self.registers.set_flag(Flags::H, lower_half_carry);
+        self.registers.set_flag(Flags::C, lower_carry);
+
+        let (upper_sum, _, _, upper_half_carry, upper_carry) = self.byte_addition(lhs_upper, rhs_upper, true);
+
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag(Flags::H, upper_half_carry);
+        self.registers.set_flag(Flags::C, upper_carry);
+
+        let sum = ((upper_sum as Word) << 4) | (lower_sum as Word);
+
+        self.registers.write_word(WordRegisterName::RegHL, sum);
     }
 
     // Byte subtraction, can specify whether the existing carry flag will be incorporated
@@ -535,6 +610,31 @@ impl Cpu {
         self.registers.set_flag(Flags::H, half_carry);
         
         operand.write_byte(self, post_increment);
+    }
+
+    pub fn inc_word_op<T: ReadWord + WriteWord>(&mut self, operand: T) {
+        let pre_increment = operand.read_word(self);
+        let post_increment = pre_increment + 1;
+
+        operand.write_word(self, post_increment);
+    }
+
+    pub fn dec_byte_op<T: ReadByte + WriteByte>(&mut self, operand: T) {
+        let pre_decrement = operand.read_byte(self);
+        let (post_decrement, zero, negate, half_carry, _) = self.byte_subtraction(pre_decrement, 1, false);
+
+        self.registers.set_flag(Flags::Z, zero);
+        self.registers.set_flag(Flags::N, negate);
+        self.registers.set_flag(Flags::H, half_carry);
+        
+        operand.write_byte(self, post_decrement);
+    }
+
+    pub fn dec_word_op<T: ReadWord + WriteWord>(&mut self, operand: T) {
+        let pre_decrement = operand.read_word(self);
+        let post_decrement = pre_decrement + 1;
+
+        operand.write_word(self, post_decrement);
     }
 
     pub fn jp_op<T: ReadWord>(&mut self, to: T, condition: ConditionCodes) -> bool {
@@ -742,6 +842,43 @@ impl Cpu {
         let mask = 1 << bit_position;
 
         item.write_byte(self, value | mask);
+    }
+
+    pub fn scf_op(&mut self) {
+        self.registers.set_flag_on(Flags::C);
+    }
+
+    pub fn daa_op(&mut self) {
+        let original_value = self.registers.read_byte(ByteRegisterName::RegA);
+
+        let previous_n_flag = self.registers.check_flag(Flags::N);
+        let previous_carry = self.registers.check_flag(Flags::C);
+        let previous_half_carry = self.registers.check_flag(Flags::H);
+
+        let mut new_carry: bool = false;
+        let mut result = original_value;
+        if !previous_n_flag {
+            if previous_carry || (result > 0x99) {
+                new_carry = true;
+                result += 0x60;
+            }
+            if previous_half_carry || ((result & 0x0f) > 0x09) {
+                result += 0x6;
+            }
+        } else {
+            if previous_carry {
+                result -= 0x60;
+            }
+            if previous_half_carry {
+                result -= 0x6;
+            }
+        }
+            
+        self.registers.set_flag(Flags::Z, result == 0);
+        self.registers.set_flag_off(Flags::H);
+        self.registers.set_flag(Flags::C, new_carry);
+
+        self.registers.write_byte(ByteRegisterName::RegA, result);
     }
 
 }

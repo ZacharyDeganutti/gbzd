@@ -373,6 +373,641 @@ impl Cpu {
                 self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegB));
                 1
             }
+            0x41 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegC));
+                1
+            }
+            0x42 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegD));
+                1
+            }
+            0x43 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegE));
+                1
+            }
+            0x44 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegH));
+                1
+            }
+            0x45 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegL));
+                1
+            }
+            0x46 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x47 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegB), ByteRegister::new(RegA));
+                1
+            }
+            0x48 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegB));
+                1
+            }
+            0x49 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegC));
+                1
+            }
+            0x4A => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegD));
+                1
+            }
+            0x4B => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegE));
+                1
+            }
+            0x4C => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegH));
+                1
+            }
+            0x4D => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegL));
+                1
+            }
+            0x4E => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x4F => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegC), ByteRegister::new(RegA));
+                1
+            }
+            0x50 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegB));
+                1
+            }
+            0x51 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegC));
+                1
+            }
+            0x52 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegD));
+                1
+            }
+            0x53 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegE));
+                1
+            }
+            0x54 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegH));
+                1
+            }
+            0x55 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegL));
+                1
+            }
+            0x56 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x57 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegD), ByteRegister::new(RegA));
+                1
+            }
+            0x58 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegB));
+                1
+            }
+            0x59 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegC));
+                1
+            }
+            0x5A => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegD));
+                1
+            }
+            0x5B => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegE));
+                1
+            }
+            0x5C => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegH));
+                1
+            }
+            0x5D => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegL));
+                1
+            }
+            0x5E => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x5F => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegE), ByteRegister::new(RegA));
+                1
+            }
+            0x60 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegB));
+                1
+            }
+            0x61 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegC));
+                1
+            }
+            0x62 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegD));
+                1
+            }
+            0x63 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegE));
+                1
+            }
+            0x64 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegH));
+                1
+            }
+            0x65 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegL));
+                1
+            }
+            0x66 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x67 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegH), ByteRegister::new(RegA));
+                1
+            }
+            0x68 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegB));
+                1
+            }
+            0x69 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegC));
+                1
+            }
+            0x6A => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegD));
+                1
+            }
+            0x6B => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegE));
+                1
+            }
+            0x6C => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegH));
+                1
+            }
+            0x6D => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegL));
+                1
+            }
+            0x6E => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x6F => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegL), ByteRegister::new(RegA));
+                1
+            }
+            0x70 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegB));
+                2
+            }
+            0x71 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegC));
+                2
+            }
+            0x72 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegD));
+                2
+            }
+            0x73 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegE));
+                2
+            }
+            0x74 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegH));
+                2
+            }
+            0x75 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegL));
+                2
+            }
+            0x76 => {
+                self.registers.step_pc(1);
+                // TODO: IMPLEMENT HALT
+                1
+            }
+            0x77 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteRegister::new(RegA));
+                2
+            }
+            0x78 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegB));
+                1
+            }
+            0x79 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegC));
+                1
+            }
+            0x7A => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegD));
+                1
+            }
+            0x7B => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegE));
+                1
+            }
+            0x7C => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegH));
+                1
+            }
+            0x7D => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegL));
+                1
+            }
+            0x7E => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0x7F => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegister::new(RegA));
+                1
+            }
+            0x80 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegB), false);
+                1
+            }
+            0x81 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegC), false);
+                1
+            }
+            0x82 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegD), false);
+                1
+            }
+            0x83 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegE), false);
+                1
+            }
+            0x84 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegH), false);
+                1
+            }
+            0x85 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegL), false);
+                1
+            }
+            0x86 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegisterIndirect::new(RegHL), false);
+                2
+            }
+            0x87 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegA), false);
+                1
+            }
+            0x88 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegB), true);
+                1
+            }
+            0x89 => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegC), true);
+                1
+            }
+            0x8A => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegD), true);
+                1
+            }
+            0x8B => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegE), true);
+                1
+            }
+            0x8C => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegH), true);
+                1
+            }
+            0x8D => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegL), true);
+                1
+            }
+            0x8E => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegisterIndirect::new(RegHL), true);
+                2
+            }
+            0x8F => {
+                self.registers.step_pc(1);
+                self.add_byte(ByteRegister::new(RegA), true);
+                1
+            }
+            0x90 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegB), false);
+                1
+            }
+            0x91 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegC), false);
+                1
+            }
+            0x92 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegD), false);
+                1
+            }
+            0x93 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegE), false);
+                1
+            }
+            0x94 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegH), false);
+                1
+            }
+            0x95 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegL), false);
+                1
+            }
+            0x96 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegisterIndirect::new(RegHL), false);
+                2
+            }
+            0x97 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegA), false);
+                1
+            }
+            0x98 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegB), true);
+                1
+            }
+            0x99 => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegC), true);
+                1
+            }
+            0x9A => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegD), true);
+                1
+            }
+            0x9B => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegE), true);
+                1
+            }
+            0x9C => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegH), true);
+                1
+            }
+            0x9D => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegL), true);
+                1
+            }
+            0x9E => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegisterIndirect::new(RegHL), true);
+                2
+            }
+            0x9F => {
+                self.registers.step_pc(1);
+                self.sub_byte(ByteRegister::new(RegA), true);
+                1
+            }
+            0xA0 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegB));
+                1
+            }
+            0xA1 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegC));
+                1
+            }
+            0xA2 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegD));
+                1
+            }
+            0xA3 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegE));
+                1
+            }
+            0xA4 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegH));
+                1
+            }
+            0xA5 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegL));
+                1
+            }
+            0xA6 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0xA7 => {
+                self.registers.step_pc(1);
+                self.and(ByteRegister::new(RegA));
+                1
+            }
+            0xA8 => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegB));
+                1
+            }
+            0xA9 => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegC));
+                1
+            }
+            0xAA => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegD));
+                1
+            }
+            0xAB => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegE));
+                1
+            }
+            0xAC => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegH));
+                1
+            }
+            0xAD => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegL));
+                1
+            }
+            0xAE => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0xAF => {
+                self.registers.step_pc(1);
+                self.xor(ByteRegister::new(RegA));
+                1
+            }
+            0xB0 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegB));
+                1
+            }
+            0xB1 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegC));
+                1
+            }
+            0xB2 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegD));
+                1
+            }
+            0xB3 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegE));
+                1
+            }
+            0xB4 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegH));
+                1
+            }
+            0xB5 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegL));
+                1
+            }
+            0xB6 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0xB7 => {
+                self.registers.step_pc(1);
+                self.or(ByteRegister::new(RegA));
+                1
+            }
+            0xB8 => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegB));
+                1
+            }
+            0xB9 => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegC));
+                1
+            }
+            0xBA => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegD));
+                1
+            }
+            0xBB => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegE));
+                1
+            }
+            0xBC => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegH));
+                1
+            }
+            0xBD => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegL));
+                1
+            }
+            0xBE => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegisterIndirect::new(RegHL));
+                2
+            }
+            0xBF => {
+                self.registers.step_pc(1);
+                self.cp(ByteRegister::new(RegA));
+                1
+            }
             _ => 0
         };
         cost

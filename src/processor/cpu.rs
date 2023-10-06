@@ -219,7 +219,7 @@ impl WriteByte for ByteImmediateOffsetIndirect {
     }
 }
 impl ByteImmediateOffsetIndirect {
-    pub fn fetch(offset: Byte, memory: MemoryMapRef) -> ByteImmediateOffsetIndirect {
+    pub fn new(offset: Byte) -> ByteImmediateOffsetIndirect {
         ByteImmediateOffsetIndirect{ offset }
     }
 }

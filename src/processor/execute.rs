@@ -10,15 +10,15 @@ use crate::processor::cpu::WordRegisterName::*;
 use crate::processor::ops;
 
 impl Cpu {
-    fn byte_operand(&mut self, position: Address) -> Byte {
+    fn byte_operand(&mut self) -> Byte {
         let address = self.registers.read_word(WordRegisterName::RegPC);
         let mut memory = self.memory.borrow_mut();
-        unsafe { memory.read::<Byte>(address + (1 + position)) }
+        unsafe { memory.read::<Byte>(address + 1) }
     } 
-    fn word_operand(&mut self, position: Address) -> Word {
+    fn word_operand(&mut self) -> Word {
         let address = self.registers.read_word(WordRegisterName::RegPC);
         let mut memory = self.memory.borrow_mut();
-        unsafe { memory.read::<Word>(address + (1 + position)) }
+        unsafe { memory.read::<Word>(address + 1) }
     } 
     fn fetch (&mut self) -> Byte {
         let address = self.registers.read_word(WordRegisterName::RegPC);
@@ -26,7 +26,7 @@ impl Cpu {
         unsafe { memory.read(address) }
     }
 
-    pub fn step(&mut self) -> u8{
+    pub fn step(&mut self) -> u8 {
         let instruction = self.fetch();
 
         let cost = match instruction {
@@ -36,7 +36,7 @@ impl Cpu {
                 1
             }
             0x01 => {
-                let value = self.word_operand(0);
+                let value = self.word_operand();
                 self.registers.step_pc(3);
                 self.ld_word(WordRegister::new(RegBC), WordImmediate::new(value));
                 3
@@ -62,7 +62,7 @@ impl Cpu {
                 1
             }
             0x06 => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegB), ByteImmediate::new(value));
                 2
@@ -73,7 +73,7 @@ impl Cpu {
                 1
             }
             0x08 => {
-                let address = self.word_operand(0);
+                let address = self.word_operand();
                 self.registers.step_pc(3);
                 self.ld_word(WordImmediateIndirect::new(address), WordRegister::new(RegSP));
                 5
@@ -104,7 +104,7 @@ impl Cpu {
                 1
             }
             0x0E => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegC), ByteImmediate::new(value));
                 2
@@ -120,7 +120,7 @@ impl Cpu {
                 1
             }
             0x11 => {
-                let value = self.word_operand(0);
+                let value = self.word_operand();
                 self.registers.step_pc(3);
                 self.ld_word(WordRegister::new(RegDE), WordImmediate::new(value));
                 3
@@ -146,7 +146,7 @@ impl Cpu {
                 1
             }
             0x16 => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegD), ByteImmediate::new(value));
                 2
@@ -157,7 +157,7 @@ impl Cpu {
                 1
             }
             0x18 => {
-                let offset = self.byte_operand(0).interpret_as_signed();
+                let offset = self.byte_operand().interpret_as_signed();
                 self.registers.step_pc(2);
                 self.jr(offset, ConditionCodes::NA);
                 3
@@ -188,7 +188,7 @@ impl Cpu {
                 1
             }
             0x1E => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegE), ByteImmediate::new(value));
                 2
@@ -199,13 +199,13 @@ impl Cpu {
                 1
             }
             0x20 => {
-                let offset = self.byte_operand(0).interpret_as_signed();
+                let offset = self.byte_operand().interpret_as_signed();
                 self.registers.step_pc(2);
                 let branched = self.jr(offset, ConditionCodes::NZ);
                 if branched { 3 } else { 2 }
             }
             0x21 => {
-                let value = self.word_operand(0);
+                let value = self.word_operand();
                 self.registers.step_pc(3);
                 self.ld_word(WordRegister::new(RegHL), WordImmediate::new(value));
                 3
@@ -231,7 +231,7 @@ impl Cpu {
                 1
             }
             0x26 => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegH), ByteImmediate::new(value));
                 2
@@ -242,7 +242,7 @@ impl Cpu {
                 1
             }
             0x28 => {
-                let offset = self.byte_operand(0).interpret_as_signed();
+                let offset = self.byte_operand().interpret_as_signed();
                 self.registers.step_pc(2);
                 let branched = self.jr(offset, ConditionCodes::Z);
                 if branched { 3 } else { 2 }
@@ -273,7 +273,7 @@ impl Cpu {
                 1
             }
             0x2E => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegL), ByteImmediate::new(value));
                 2
@@ -284,13 +284,13 @@ impl Cpu {
                 1
             }
             0x30 => {
-                let offset = self.byte_operand(0).interpret_as_signed();
+                let offset = self.byte_operand().interpret_as_signed();
                 self.registers.step_pc(2);
                 let branched = self.jr(offset, ConditionCodes::NC);
                 if branched { 3 } else { 2 }
             }
             0x31 => {
-                let value = self.word_operand(0);
+                let value = self.word_operand();
                 self.registers.step_pc(3);
                 self.ld_word(WordRegister::new(RegSP), WordImmediate::new(value));
                 3
@@ -316,7 +316,7 @@ impl Cpu {
                 3
             }
             0x36 => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegisterIndirect::new(RegHL), ByteImmediate::new(value));
                 3
@@ -327,7 +327,7 @@ impl Cpu {
                 1
             }
             0x38 => {
-                let offset = self.byte_operand(0).interpret_as_signed();
+                let offset = self.byte_operand().interpret_as_signed();
                 self.registers.step_pc(2);
                 let branched = self.jr(offset, ConditionCodes::C);
                 if branched { 3 } else { 2 }
@@ -358,7 +358,7 @@ impl Cpu {
                 1
             }
             0x3E => {
-                let value = self.byte_operand(0);
+                let value = self.byte_operand();
                 self.registers.step_pc(2);
                 self.ld_byte(ByteRegister::new(RegA), ByteImmediate::new(value));
                 2
@@ -1008,8 +1008,304 @@ impl Cpu {
                 self.cp(ByteRegister::new(RegA));
                 1
             }
+            0xC0 => {
+                self.registers.step_pc(1);
+                let branched = self.ret(ConditionCodes::NZ);
+                if branched { 5 } else { 2 }
+            }
+            0xC1 => {
+                self.registers.step_pc(1);
+                self.pop(RegBC);
+                3
+            }
+            0xC2 => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.jp(WordImmediate::new(address), ConditionCodes::NZ);
+                if branched { 4 } else { 3 }
+            }
+            0xC3 => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                self.jp(WordImmediate::new(address), ConditionCodes::NA);
+                4
+            }
+            0xC4 => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.call(address, ConditionCodes::NZ);
+                if branched { 6 } else { 3 }
+            }
+            0xC5 => {
+                self.registers.step_pc(1);
+                self.push(RegBC);
+                4
+            }
+            0xC6 => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.add_byte(ByteImmediate::new(value), false);
+                2
+            }
+            0xC7 => {
+                self.registers.step_pc(1);
+                self.rst(0x00);
+                4
+            }
+            0xC8 => {
+                self.registers.step_pc(1);
+                let branched = self.ret(ConditionCodes::Z);
+                if branched { 5 } else { 2 }
+            }
+            0xC9 => {
+                self.registers.step_pc(1);
+                self.ret(ConditionCodes::NA);
+                4
+            }
+            0xCA => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.jp(WordImmediate::new(address), ConditionCodes::Z);
+                if branched { 4 } else { 3 }
+            }
+            0xCB => {
+                let op = self.byte_operand();
+                self.registers.step_pc(1);
+                self.step_cb(op)
+            }
+            0xCC => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.call(address, ConditionCodes::Z);
+                if branched { 6 } else { 3 }
+            }
+            0xCD => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                self.call(address, ConditionCodes::NA);
+                6
+            }
+            0xCE => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.add_byte(ByteImmediate::new(value), true);
+                2
+            }
+            0xCF => {
+                self.registers.step_pc(1);
+                self.rst(0x08);
+                4
+            }
+            0xD0 => {
+                self.registers.step_pc(1);
+                let branched = self.ret(ConditionCodes::NC);
+                if branched { 5 } else { 2 }
+            }
+            0xD1 => {
+                self.registers.step_pc(1);
+                self.pop(RegDE);
+                3
+            }
+            0xD2 => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.jp(WordImmediate::new(address), ConditionCodes::NC);
+                if branched { 4 } else { 3 }
+            }
+            0xD4 => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.call(address, ConditionCodes::NC);
+                if branched { 6 } else { 3 }
+            }
+            0xD5 => {
+                self.registers.step_pc(1);
+                self.push(RegDE);
+                4
+            }
+            0xD6 => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.sub_byte(ByteImmediate::new(value), false);
+                2
+            }
+            0xD7 => {
+                self.registers.step_pc(1);
+                self.rst(0x10);
+                4
+            }
+            0xD8 => {
+                self.registers.step_pc(1);
+                let branched = self.ret(ConditionCodes::C);
+                if branched { 5 } else { 2 }
+            }
+            0xD9 => {
+                // TODO verify if reti = ret in practice
+                self.registers.step_pc(1);
+                self.ret(ConditionCodes::NA);
+                4
+            }
+            0xDA => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.jp(WordImmediate::new(address), ConditionCodes::Z);
+                if branched { 4 } else { 3 }
+            }
+            0xDC => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                let branched = self.call(address, ConditionCodes::C);
+                if branched { 6 } else { 3 }
+            }
+            0xDE => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.sub_byte(ByteImmediate::new(value), true);
+                2
+            }
+            0xDF => {
+                self.registers.step_pc(1);
+                self.rst(0x18);
+                4
+            }
+            0xE0 => {
+                let offset = self.byte_operand();
+                self.registers.step_pc(2);
+                self.ld_byte(ByteImmediateOffsetIndirect::new(offset), ByteRegister::new(RegA));
+                3
+            }
+            0xE1 => {
+                self.registers.step_pc(1);
+                self.pop(RegHL);
+                3
+            }
+            0xE2 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegisterOffsetIndirect::new(RegC), ByteRegister::new(RegA));
+                2
+            }
+            0xE5 => {
+                self.registers.step_pc(1);
+                self.push(RegHL);
+                4
+            }
+            0xE6 => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.and(ByteImmediate::new(value));
+                2
+            }
+            0xE7 => {
+                self.registers.step_pc(1);
+                self.rst(0x20);
+                4
+            }
+            0xE8 => {
+                let offset = self.byte_operand().interpret_as_signed();
+                self.registers.step_pc(2);
+                self.add_sp_i8(RegSP, offset);
+                4
+            }
+            0xE9 => {
+                // TODO verify if reti = ret in practice
+                self.registers.step_pc(1);
+                self.jp(WordRegister::new(RegHL), ConditionCodes::NA);
+                1
+            }
+            0xEA => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                self.ld_byte(ByteImmediateIndirect::new(address), ByteRegister::new(RegA));
+                4
+            }
+            0xEE => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.xor(ByteImmediate::new(value));
+                2
+            }
+            0xEF => {
+                self.registers.step_pc(1);
+                self.rst(0x28);
+                4
+            }
+            0xF0 => {
+                let offset = self.byte_operand();
+                self.registers.step_pc(2);
+                self.ld_byte(ByteRegister::new(RegA), ByteImmediateOffsetIndirect::new(offset));
+                3
+            }
+            0xF1 => {
+                self.registers.step_pc(1);
+                self.pop(RegAF);
+                3
+            }
+            0xF2 => {
+                self.registers.step_pc(1);
+                self.ld_byte(ByteRegister::new(RegA), ByteRegisterOffsetIndirect::new(RegC));
+                2
+            }
+            0xF3 => {
+                self.registers.step_pc(1);
+                // TODO: DI
+                1
+            }
+            0xF5 => {
+                self.registers.step_pc(1);
+                self.push(RegAF);
+                4
+            }
+            0xF6 => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.or(ByteImmediate::new(value));
+                2
+            }
+            0xF7 => {
+                self.registers.step_pc(1);
+                self.rst(0x30);
+                4
+            }
+            0xF8 => {
+                let offset = self.byte_operand().interpret_as_signed();
+                self.registers.step_pc(2);
+                self.add_sp_i8(RegHL, offset);
+                3
+            }
+            0xF9 => {
+                // TODO verify if reti = ret in practice
+                self.registers.step_pc(1);
+                self.ld_word(WordRegister::new(RegSP), WordRegister::new(RegHL));
+                2
+            }
+            0xFA => {
+                let address = self.word_operand();
+                self.registers.step_pc(3);
+                self.ld_byte(ByteRegister::new(RegA), ByteImmediateIndirect::new(address));
+                4
+            }
+            0xFB => {
+                self.registers.step_pc(1);
+                // TODO: EI
+                1
+            }
+            0xFE => {
+                let value = self.byte_operand();
+                self.registers.step_pc(2);
+                self.cp(ByteImmediate::new(value));
+                2
+            }
+            0xFF => {
+                self.registers.step_pc(1);
+                self.rst(0x38);
+                4
+            }
             _ => 0
         };
         cost
+    }
+
+    fn step_cb(&mut self, operand: Byte) -> u8 {
+        0
     }
 }

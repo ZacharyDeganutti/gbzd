@@ -1207,7 +1207,6 @@ impl Cpu {
                 4
             }
             0xE9 => {
-                // TODO verify if reti = ret in practice
                 self.registers.step_pc(1);
                 self.jp(WordRegister::new(RegHL), ConditionCodes::NA);
                 1

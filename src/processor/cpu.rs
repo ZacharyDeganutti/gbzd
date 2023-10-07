@@ -366,7 +366,7 @@ impl Cpu {
             h: 0,
             l: 0,
             sp: 0xFFFE.to_gb_endian(),
-            pc: 0.to_gb_endian(),
+            pc: 0x0100.to_gb_endian(),
         };
         Cpu { 
             registers: regs,

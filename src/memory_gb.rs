@@ -54,24 +54,18 @@ impl MemoryUnit for Word {}
 //      These can be presumed safe only if the MemoryRegion is equal in size to the Address space of 0x10000
 //      Where are my dependent types?
 pub trait MemoryRegion: Sized {
-    // TODO: fix garbage abstraction, can't assume Words will be Word-aligned
-    // Don't do this reinterpreting nonsense, simply create read/write byte/word like in other places
-    // Write read/write word in terms of reading 2 bytes
-    unsafe fn interpret_as<T: MemoryUnit>(&mut self) -> &mut [T] {
-        let ptr = mem::transmute::<&mut Self, *mut T>(self);
-        slice::from_raw_parts_mut(ptr, mem::size_of::<Self>() / mem::size_of::<T>())
+    unsafe fn get_ptr<T: MemoryUnit>(&mut self, address: Address) -> *mut T {
+        mem::transmute::<*mut Byte, *mut T>((self as *mut Self as *mut Byte).offset(address as isize))
     }
 
-    // Can be presumed safe for memory regions of size 0x10000
     unsafe fn read<T: MemoryUnit>(&mut self, from: Address) -> T {
-        let slice =  self.interpret_as::<T>();
-        slice[from as usize].from_gb_endian()
+        let read_location =  self.get_ptr::<T>(from);
+        (*read_location).from_gb_endian()
     }
 
-    // Can be presumed safe for memory regions of size 0x10000
     unsafe fn write<T: MemoryUnit>(&mut self, value: T, to: Address) -> () {
-        let slice = self.interpret_as::<T>();
-        slice[to as usize] = value.to_gb_endian()
+        let write_location = self.get_ptr::<T>(to);
+        (*write_location) = value.to_gb_endian()
     }
 }
 

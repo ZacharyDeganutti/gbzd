@@ -1306,6 +1306,1033 @@ impl Cpu {
     }
 
     fn step_cb(&mut self, operand: Byte) -> u8 {
-        0
+        let instruction = self.fetch();
+        self.registers.step_pc(1);
+        match instruction {
+            0x00 => {
+                self.rlc(ByteRegister::new(RegB));
+                2
+            }
+            0x01 => {
+                self.rlc(ByteRegister::new(RegC));
+                2
+            }
+            0x02 => {
+                self.rlc(ByteRegister::new(RegD));
+                2
+            }
+            0x03 => {
+                self.rlc(ByteRegister::new(RegE));
+                2
+            }
+            0x04 => {
+                self.rlc(ByteRegister::new(RegH));
+                2
+            }
+            0x05 => {
+                self.rlc(ByteRegister::new(RegL));
+                2
+            }
+            0x06 => {
+                self.rlc(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x07 => {
+                self.rlc(ByteRegister::new(RegA));
+                2
+            }
+            0x08 => {
+                self.rrc(ByteRegister::new(RegB));
+                2
+            }
+            0x09 => {
+                self.rrc(ByteRegister::new(RegC));
+                2
+            }
+            0x0A => {
+                self.rrc(ByteRegister::new(RegD));
+                2
+            }
+            0x0B => {
+                self.rrc(ByteRegister::new(RegE));
+                2
+            }
+            0x0C => {
+                self.rrc(ByteRegister::new(RegH));
+                2
+            }
+            0x0D => {
+                self.rrc(ByteRegister::new(RegL));
+                2
+            }
+            0x0E => {
+                self.rrc(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x0F => {
+                self.rrc(ByteRegister::new(RegA));
+                2
+            }
+            0x10 => {
+                self.rl(ByteRegister::new(RegB));
+                2
+            }
+            0x11 => {
+                self.rl(ByteRegister::new(RegC));
+                2
+            }
+            0x12 => {
+                self.rl(ByteRegister::new(RegD));
+                2
+            }
+            0x13 => {
+                self.rl(ByteRegister::new(RegE));
+                2
+            }
+            0x14 => {
+                self.rl(ByteRegister::new(RegH));
+                2
+            }
+            0x15 => {
+                self.rl(ByteRegister::new(RegL));
+                2
+            }
+            0x16 => {
+                self.rl(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x17 => {
+                self.rl(ByteRegister::new(RegA));
+                2
+            }
+            0x18 => {
+                self.rr(ByteRegister::new(RegB));
+                2
+            }
+            0x19 => {
+                self.rr(ByteRegister::new(RegC));
+                2
+            }
+            0x1A => {
+                self.rr(ByteRegister::new(RegD));
+                2
+            }
+            0x1B => {
+                self.rr(ByteRegister::new(RegE));
+                2
+            }
+            0x1C => {
+                self.rr(ByteRegister::new(RegH));
+                2
+            }
+            0x1D => {
+                self.rr(ByteRegister::new(RegL));
+                2
+            }
+            0x1E => {
+                self.rr(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x1F => {
+                self.rr(ByteRegister::new(RegA));
+                2
+            }
+            0x20 => {
+                self.sla(ByteRegister::new(RegB));
+                2
+            }
+            0x21 => {
+                self.sla(ByteRegister::new(RegC));
+                2
+            }
+            0x22 => {
+                self.sla(ByteRegister::new(RegD));
+                2
+            }
+            0x23 => {
+                self.sla(ByteRegister::new(RegE));
+                2
+            }
+            0x24 => {
+                self.sla(ByteRegister::new(RegH));
+                2
+            }
+            0x25 => {
+                self.sla(ByteRegister::new(RegL));
+                2
+            }
+            0x26 => {
+                self.sla(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x27 => {
+                self.sla(ByteRegister::new(RegA));
+                2
+            }
+            0x28 => {
+                self.sra(ByteRegister::new(RegB));
+                2
+            }
+            0x29 => {
+                self.sra(ByteRegister::new(RegC));
+                2
+            }
+            0x2A => {
+                self.sra(ByteRegister::new(RegD));
+                2
+            }
+            0x2B => {
+                self.sra(ByteRegister::new(RegE));
+                2
+            }
+            0x2C => {
+                self.sra(ByteRegister::new(RegH));
+                2
+            }
+            0x2D => {
+                self.sra(ByteRegister::new(RegL));
+                2
+            }
+            0x2E => {
+                self.sra(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x2F => {
+                self.sra(ByteRegister::new(RegA));
+                2
+            }
+            0x30 => {
+                self.swap(ByteRegister::new(RegB));
+                2
+            }
+            0x31 => {
+                self.swap(ByteRegister::new(RegC));
+                2
+            }
+            0x32 => {
+                self.swap(ByteRegister::new(RegD));
+                2
+            }
+            0x33 => {
+                self.swap(ByteRegister::new(RegE));
+                2
+            }
+            0x34 => {
+                self.swap(ByteRegister::new(RegH));
+                2
+            }
+            0x35 => {
+                self.swap(ByteRegister::new(RegL));
+                2
+            }
+            0x36 => {
+                self.swap(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x37 => {
+                self.swap(ByteRegister::new(RegA));
+                2
+            }
+            0x38 => {
+                self.srl(ByteRegister::new(RegB));
+                2
+            }
+            0x39 => {
+                self.srl(ByteRegister::new(RegC));
+                2
+            }
+            0x3A => {
+                self.srl(ByteRegister::new(RegD));
+                2
+            }
+            0x3B => {
+                self.srl(ByteRegister::new(RegE));
+                2
+            }
+            0x3C => {
+                self.srl(ByteRegister::new(RegH));
+                2
+            }
+            0x3D => {
+                self.srl(ByteRegister::new(RegL));
+                2
+            }
+            0x3E => {
+                self.srl(ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x3F => {
+                self.srl(ByteRegister::new(RegA));
+                2
+            }
+            0x40 => {
+                self.bit(0, ByteRegister::new(RegB));
+                2
+            }
+            0x41 => {
+                self.bit(0, ByteRegister::new(RegC));
+                2
+            }
+            0x42 => {
+                self.bit(0, ByteRegister::new(RegD));
+                2
+            }
+            0x43 => {
+                self.bit(0, ByteRegister::new(RegE));
+                2
+            }
+            0x44 => {
+                self.bit(0, ByteRegister::new(RegH));
+                2
+            }
+            0x45 => {
+                self.bit(0, ByteRegister::new(RegL));
+                2
+            }
+            0x46 => {
+                self.bit(0, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x47 => {
+                self.bit(0, ByteRegister::new(RegA));
+                2
+            }
+            0x48 => {
+                self.bit(1, ByteRegister::new(RegB));
+                2
+            }
+            0x49 => {
+                self.bit(1, ByteRegister::new(RegC));
+                2
+            }
+            0x4A => {
+                self.bit(1, ByteRegister::new(RegD));
+                2
+            }
+            0x4B => {
+                self.bit(1, ByteRegister::new(RegE));
+                2
+            }
+            0x4C => {
+                self.bit(1, ByteRegister::new(RegH));
+                2
+            }
+            0x4D => {
+                self.bit(1, ByteRegister::new(RegL));
+                2
+            }
+            0x4E => {
+                self.bit(1, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x4F => {
+                self.bit(1, ByteRegister::new(RegA));
+                2
+            }
+            0x50 => {
+                self.bit(2, ByteRegister::new(RegB));
+                2
+            }
+            0x51 => {
+                self.bit(2, ByteRegister::new(RegC));
+                2
+            }
+            0x52 => {
+                self.bit(2, ByteRegister::new(RegD));
+                2
+            }
+            0x53 => {
+                self.bit(2, ByteRegister::new(RegE));
+                2
+            }
+            0x54 => {
+                self.bit(2, ByteRegister::new(RegH));
+                2
+            }
+            0x55 => {
+                self.bit(2, ByteRegister::new(RegL));
+                2
+            }
+            0x56 => {
+                self.bit(2, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x57 => {
+                self.bit(2, ByteRegister::new(RegA));
+                2
+            }
+            0x58 => {
+                self.bit(3, ByteRegister::new(RegB));
+                2
+            }
+            0x59 => {
+                self.bit(3, ByteRegister::new(RegC));
+                2
+            }
+            0x5A => {
+                self.bit(3, ByteRegister::new(RegD));
+                2
+            }
+            0x5B => {
+                self.bit(3, ByteRegister::new(RegE));
+                2
+            }
+            0x5C => {
+                self.bit(3, ByteRegister::new(RegH));
+                2
+            }
+            0x5D => {
+                self.bit(3, ByteRegister::new(RegL));
+                2
+            }
+            0x5E => {
+                self.bit(3, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x5F => {
+                self.bit(3, ByteRegister::new(RegA));
+                2
+            }
+            0x60 => {
+                self.bit(4, ByteRegister::new(RegB));
+                2
+            }
+            0x61 => {
+                self.bit(4, ByteRegister::new(RegC));
+                2
+            }
+            0x62 => {
+                self.bit(4, ByteRegister::new(RegD));
+                2
+            }
+            0x63 => {
+                self.bit(4, ByteRegister::new(RegE));
+                2
+            }
+            0x64 => {
+                self.bit(4, ByteRegister::new(RegH));
+                2
+            }
+            0x65 => {
+                self.bit(4, ByteRegister::new(RegL));
+                2
+            }
+            0x66 => {
+                self.bit(4, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x67 => {
+                self.bit(4, ByteRegister::new(RegA));
+                2
+            }
+            0x68 => {
+                self.bit(5, ByteRegister::new(RegB));
+                2
+            }
+            0x69 => {
+                self.bit(5, ByteRegister::new(RegC));
+                2
+            }
+            0x6A => {
+                self.bit(5, ByteRegister::new(RegD));
+                2
+            }
+            0x6B => {
+                self.bit(5, ByteRegister::new(RegE));
+                2
+            }
+            0x6C => {
+                self.bit(5, ByteRegister::new(RegH));
+                2
+            }
+            0x6D => {
+                self.bit(5, ByteRegister::new(RegL));
+                2
+            }
+            0x6E => {
+                self.bit(5, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x6F => {
+                self.bit(5, ByteRegister::new(RegA));
+                2
+            }
+            0x70 => {
+                self.bit(6, ByteRegister::new(RegB));
+                2
+            }
+            0x71 => {
+                self.bit(6, ByteRegister::new(RegC));
+                2
+            }
+            0x72 => {
+                self.bit(6, ByteRegister::new(RegD));
+                2
+            }
+            0x73 => {
+                self.bit(6, ByteRegister::new(RegE));
+                2
+            }
+            0x74 => {
+                self.bit(6, ByteRegister::new(RegH));
+                2
+            }
+            0x75 => {
+                self.bit(6, ByteRegister::new(RegL));
+                2
+            }
+            0x76 => {
+                self.bit(6, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x77 => {
+                self.bit(6, ByteRegister::new(RegA));
+                2
+            }
+            0x78 => {
+                self.bit(7, ByteRegister::new(RegB));
+                2
+            }
+            0x79 => {
+                self.bit(7, ByteRegister::new(RegC));
+                2
+            }
+            0x7A => {
+                self.bit(7, ByteRegister::new(RegD));
+                2
+            }
+            0x7B => {
+                self.bit(7, ByteRegister::new(RegE));
+                2
+            }
+            0x7C => {
+                self.bit(7, ByteRegister::new(RegH));
+                2
+            }
+            0x7D => {
+                self.bit(7, ByteRegister::new(RegL));
+                2
+            }
+            0x7E => {
+                self.bit(7, ByteRegisterIndirect::new(RegHL));
+                3
+            }
+            0x7F => {
+                self.bit(7, ByteRegister::new(RegA));
+                2
+            }
+            0x80 => {
+                self.res(0, ByteRegister::new(RegB));
+                2
+            }
+            0x81 => {
+                self.res(0, ByteRegister::new(RegC));
+                2
+            }
+            0x82 => {
+                self.res(0, ByteRegister::new(RegD));
+                2
+            }
+            0x83 => {
+                self.res(0, ByteRegister::new(RegE));
+                2
+            }
+            0x84 => {
+                self.res(0, ByteRegister::new(RegH));
+                2
+            }
+            0x85 => {
+                self.res(0, ByteRegister::new(RegL));
+                2
+            }
+            0x86 => {
+                self.res(0, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x87 => {
+                self.res(0, ByteRegister::new(RegA));
+                2
+            }
+            0x88 => {
+                self.res(1, ByteRegister::new(RegB));
+                2
+            }
+            0x89 => {
+                self.res(1, ByteRegister::new(RegC));
+                2
+            }
+            0x8A => {
+                self.res(1, ByteRegister::new(RegD));
+                2
+            }
+            0x8B => {
+                self.res(1, ByteRegister::new(RegE));
+                2
+            }
+            0x8C => {
+                self.res(1, ByteRegister::new(RegH));
+                2
+            }
+            0x8D => {
+                self.res(1, ByteRegister::new(RegL));
+                2
+            }
+            0x8E => {
+                self.res(1, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x8F => {
+                self.res(1, ByteRegister::new(RegA));
+                2
+            }
+            0x90 => {
+                self.res(2, ByteRegister::new(RegB));
+                2
+            }
+            0x91 => {
+                self.res(2, ByteRegister::new(RegC));
+                2
+            }
+            0x92 => {
+                self.res(2, ByteRegister::new(RegD));
+                2
+            }
+            0x93 => {
+                self.res(2, ByteRegister::new(RegE));
+                2
+            }
+            0x94 => {
+                self.res(2, ByteRegister::new(RegH));
+                2
+            }
+            0x95 => {
+                self.res(2, ByteRegister::new(RegL));
+                2
+            }
+            0x96 => {
+                self.res(2, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x97 => {
+                self.res(2, ByteRegister::new(RegA));
+                2
+            }
+            0x98 => {
+                self.res(3, ByteRegister::new(RegB));
+                2
+            }
+            0x99 => {
+                self.res(3, ByteRegister::new(RegC));
+                2
+            }
+            0x9A => {
+                self.res(3, ByteRegister::new(RegD));
+                2
+            }
+            0x9B => {
+                self.res(3, ByteRegister::new(RegE));
+                2
+            }
+            0x9C => {
+                self.res(3, ByteRegister::new(RegH));
+                2
+            }
+            0x9D => {
+                self.res(3, ByteRegister::new(RegL));
+                2
+            }
+            0x9E => {
+                self.res(3, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0x9F => {
+                self.res(3, ByteRegister::new(RegA));
+                2
+            }
+            0xA0 => {
+                self.res(4, ByteRegister::new(RegB));
+                2
+            }
+            0xA1 => {
+                self.res(4, ByteRegister::new(RegC));
+                2
+            }
+            0xA2 => {
+                self.res(4, ByteRegister::new(RegD));
+                2
+            }
+            0xA3 => {
+                self.res(4, ByteRegister::new(RegE));
+                2
+            }
+            0xA4 => {
+                self.res(4, ByteRegister::new(RegH));
+                2
+            }
+            0xA5 => {
+                self.res(4, ByteRegister::new(RegL));
+                2
+            }
+            0xA6 => {
+                self.res(4, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xA7 => {
+                self.res(4, ByteRegister::new(RegA));
+                2
+            }
+            0xA8 => {
+                self.res(5, ByteRegister::new(RegB));
+                2
+            }
+            0xA9 => {
+                self.res(5, ByteRegister::new(RegC));
+                2
+            }
+            0xAA => {
+                self.res(5, ByteRegister::new(RegD));
+                2
+            }
+            0xAB => {
+                self.res(5, ByteRegister::new(RegE));
+                2
+            }
+            0xAC => {
+                self.res(5, ByteRegister::new(RegH));
+                2
+            }
+            0xAD => {
+                self.res(5, ByteRegister::new(RegL));
+                2
+            }
+            0xAE => {
+                self.res(5, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xAF => {
+                self.res(5, ByteRegister::new(RegA));
+                2
+            }
+            0xB0 => {
+                self.res(6, ByteRegister::new(RegB));
+                2
+            }
+            0xB1 => {
+                self.res(6, ByteRegister::new(RegC));
+                2
+            }
+            0xB2 => {
+                self.res(6, ByteRegister::new(RegD));
+                2
+            }
+            0xB3 => {
+                self.res(6, ByteRegister::new(RegE));
+                2
+            }
+            0xB4 => {
+                self.res(6, ByteRegister::new(RegH));
+                2
+            }
+            0xB5 => {
+                self.res(6, ByteRegister::new(RegL));
+                2
+            }
+            0xB6 => {
+                self.res(6, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xB7 => {
+                self.res(6, ByteRegister::new(RegA));
+                2
+            }
+            0xB8 => {
+                self.res(7, ByteRegister::new(RegB));
+                2
+            }
+            0xB9 => {
+                self.res(7, ByteRegister::new(RegC));
+                2
+            }
+            0xBA => {
+                self.res(7, ByteRegister::new(RegD));
+                2
+            }
+            0xBB => {
+                self.res(7, ByteRegister::new(RegE));
+                2
+            }
+            0xBC => {
+                self.res(7, ByteRegister::new(RegH));
+                2
+            }
+            0xBD => {
+                self.res(7, ByteRegister::new(RegL));
+                2
+            }
+            0xBE => {
+                self.res(7, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xBF => {
+                self.res(7, ByteRegister::new(RegA));
+                2
+            }
+            0xC0 => {
+                self.set(0, ByteRegister::new(RegB));
+                2
+            }
+            0xC1 => {
+                self.set(0, ByteRegister::new(RegC));
+                2
+            }
+            0xC2 => {
+                self.set(0, ByteRegister::new(RegD));
+                2
+            }
+            0xC3 => {
+                self.set(0, ByteRegister::new(RegE));
+                2
+            }
+            0xC4 => {
+                self.set(0, ByteRegister::new(RegH));
+                2
+            }
+            0xC5 => {
+                self.set(0, ByteRegister::new(RegL));
+                2
+            }
+            0xC6 => {
+                self.set(0, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xC7 => {
+                self.set(0, ByteRegister::new(RegA));
+                2
+            }
+            0xC8 => {
+                self.set(1, ByteRegister::new(RegB));
+                2
+            }
+            0xC9 => {
+                self.set(1, ByteRegister::new(RegC));
+                2
+            }
+            0xCA => {
+                self.set(1, ByteRegister::new(RegD));
+                2
+            }
+            0xCB => {
+                self.set(1, ByteRegister::new(RegE));
+                2
+            }
+            0xCC => {
+                self.set(1, ByteRegister::new(RegH));
+                2
+            }
+            0xCD => {
+                self.set(1, ByteRegister::new(RegL));
+                2
+            }
+            0xCE => {
+                self.set(1, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xCF => {
+                self.set(1, ByteRegister::new(RegA));
+                2
+            }
+            0xD0 => {
+                self.set(2, ByteRegister::new(RegB));
+                2
+            }
+            0xD1 => {
+                self.set(2, ByteRegister::new(RegC));
+                2
+            }
+            0xD2 => {
+                self.set(2, ByteRegister::new(RegD));
+                2
+            }
+            0xD3 => {
+                self.set(2, ByteRegister::new(RegE));
+                2
+            }
+            0xD4 => {
+                self.set(2, ByteRegister::new(RegH));
+                2
+            }
+            0xD5 => {
+                self.set(2, ByteRegister::new(RegL));
+                2
+            }
+            0xD6 => {
+                self.set(2, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xD7 => {
+                self.set(2, ByteRegister::new(RegA));
+                2
+            }
+            0xD8 => {
+                self.set(3, ByteRegister::new(RegB));
+                2
+            }
+            0xD9 => {
+                self.set(3, ByteRegister::new(RegC));
+                2
+            }
+            0xDA => {
+                self.set(3, ByteRegister::new(RegD));
+                2
+            }
+            0xDB => {
+                self.set(3, ByteRegister::new(RegE));
+                2
+            }
+            0xDC => {
+                self.set(3, ByteRegister::new(RegH));
+                2
+            }
+            0xDD => {
+                self.set(3, ByteRegister::new(RegL));
+                2
+            }
+            0xDE => {
+                self.set(3, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xDF => {
+                self.set(3, ByteRegister::new(RegA));
+                2
+            }
+            0xE0 => {
+                self.set(4, ByteRegister::new(RegB));
+                2
+            }
+            0xE1 => {
+                self.set(4, ByteRegister::new(RegC));
+                2
+            }
+            0xE2 => {
+                self.set(4, ByteRegister::new(RegD));
+                2
+            }
+            0xE3 => {
+                self.set(4, ByteRegister::new(RegE));
+                2
+            }
+            0xE4 => {
+                self.set(4, ByteRegister::new(RegH));
+                2
+            }
+            0xE5 => {
+                self.set(4, ByteRegister::new(RegL));
+                2
+            }
+            0xE6 => {
+                self.set(4, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xE7 => {
+                self.set(4, ByteRegister::new(RegA));
+                2
+            }
+            0xE8 => {
+                self.set(5, ByteRegister::new(RegB));
+                2
+            }
+            0xE9 => {
+                self.set(5, ByteRegister::new(RegC));
+                2
+            }
+            0xEA => {
+                self.set(5, ByteRegister::new(RegD));
+                2
+            }
+            0xEB => {
+                self.set(5, ByteRegister::new(RegE));
+                2
+            }
+            0xEC => {
+                self.set(5, ByteRegister::new(RegH));
+                2
+            }
+            0xED => {
+                self.set(5, ByteRegister::new(RegL));
+                2
+            }
+            0xEE => {
+                self.set(5, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xEF => {
+                self.set(5, ByteRegister::new(RegA));
+                2
+            }
+            0xF0 => {
+                self.set(6, ByteRegister::new(RegB));
+                2
+            }
+            0xF1 => {
+                self.set(6, ByteRegister::new(RegC));
+                2
+            }
+            0xF2 => {
+                self.set(6, ByteRegister::new(RegD));
+                2
+            }
+            0xF3 => {
+                self.set(6, ByteRegister::new(RegE));
+                2
+            }
+            0xF4 => {
+                self.set(6, ByteRegister::new(RegH));
+                2
+            }
+            0xF5 => {
+                self.set(6, ByteRegister::new(RegL));
+                2
+            }
+            0xF6 => {
+                self.set(6, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xF7 => {
+                self.set(6, ByteRegister::new(RegA));
+                2
+            }
+            0xF8 => {
+                self.set(7, ByteRegister::new(RegB));
+                2
+            }
+            0xF9 => {
+                self.set(7, ByteRegister::new(RegC));
+                2
+            }
+            0xFA => {
+                self.set(7, ByteRegister::new(RegD));
+                2
+            }
+            0xFB => {
+                self.set(7, ByteRegister::new(RegE));
+                2
+            }
+            0xFC => {
+                self.set(7, ByteRegister::new(RegH));
+                2
+            }
+            0xFD => {
+                self.set(7, ByteRegister::new(RegL));
+                2
+            }
+            0xFE => {
+                self.set(7, ByteRegisterIndirect::new(RegHL));
+                4
+            }
+            0xFF => {
+                self.set(7, ByteRegister::new(RegA));
+                2
+            }
+        }
     }
 }

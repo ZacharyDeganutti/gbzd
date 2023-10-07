@@ -125,14 +125,14 @@ impl ReadByte for ByteRegisterIndirect {
     fn read_byte(&self, cpu: &mut Cpu) -> Byte {
         let address = cpu.registers.read_word(self.register);
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.read::<Byte>(address) }
+        map.read::<Byte>(address)
     }
 }
 impl WriteByte for ByteRegisterIndirect {
     fn write_byte(&self, cpu: &mut Cpu, value: Byte) {
         let address = cpu.registers.read_word(self.register);
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.write(value, address) }
+        map.write(value, address)
     }
 }
 impl ByteRegisterIndirect {
@@ -149,7 +149,7 @@ impl ReadByte for ByteRegisterOffsetIndirect {
         let offset = cpu.registers.read_byte(self.register);
         let address = 0xFF00 + offset as Address;
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.read::<Byte>(address) }
+        map.read::<Byte>(address)
     }
 }
 impl WriteByte for ByteRegisterOffsetIndirect {
@@ -157,7 +157,7 @@ impl WriteByte for ByteRegisterOffsetIndirect {
         let offset = cpu.registers.read_byte(self.register) as Address;
         let address = 0xFF00 + offset;
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.write(value, address) }
+        map.write(value, address)
     }
 }
 impl ByteRegisterOffsetIndirect {
@@ -186,13 +186,13 @@ pub struct ByteImmediateIndirect {
 impl ReadByte for ByteImmediateIndirect {
     fn read_byte(&self, cpu: &mut Cpu) -> Byte {
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.read::<Byte>(self.address) } 
+        map.read::<Byte>(self.address)
     }
 }
 impl WriteByte for ByteImmediateIndirect {
     fn write_byte(&self, cpu: &mut Cpu, value: Byte) {
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.write(value, self.address) }
+        map.write(value, self.address)
     }
 }
 impl ByteImmediateIndirect {
@@ -208,14 +208,14 @@ impl ReadByte for ByteImmediateOffsetIndirect {
     fn read_byte(&self, cpu: &mut Cpu) -> Byte {
         let address = 0xFF00 + self.offset as Address;
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.read::<Byte>(address) }
+        map.read::<Byte>(address)
     }
 }
 impl WriteByte for ByteImmediateOffsetIndirect {
     fn write_byte(&self, cpu: &mut Cpu, value: Byte) {
         let address = 0xFF00 + self.offset as Address;
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.write(value, address) }
+        map.write(value, address)
     }
 }
 impl ByteImmediateOffsetIndirect {
@@ -244,7 +244,7 @@ pub struct WordImmediateIndirect {
 impl WriteWord for WordImmediateIndirect {
     fn write_word(&self, cpu: &mut Cpu, value: Word) {
         let mut map = cpu.memory.borrow_mut();
-        unsafe { map.write(value, self.address) }
+        map.write(value, self.address)
     }
 }
 impl WordImmediateIndirect {
@@ -285,17 +285,17 @@ pub struct RegisterBank {
 impl MemoryRegion for RegisterBank {}
 impl RegisterBank {
     pub fn read_byte(&mut self, register: ByteRegisterName) -> Byte {
-        unsafe { self.read::<Byte>(register as Address) }
+        self.read::<Byte>(register as Address)
     }
     pub fn read_word(&mut self, register: WordRegisterName) -> Word {
-        unsafe { self.read::<Word>(register as Address) }
+        self.read::<Word>(register as Address)
     }
 
     pub fn write_byte(&mut self, register: ByteRegisterName, value: Byte) -> () {
-        unsafe { self.write::<Byte>(value, register as Address) }
+        self.write::<Byte>(value, register as Address)
     }
     pub fn write_word(&mut self, register: WordRegisterName, value: Word) -> () {
-        unsafe { self.write::<Word>(value, register as Address) }
+        self.write::<Word>(value, register as Address)
     }
 
     pub fn set_flag(&mut self, flag: Flags, value: bool) -> () {

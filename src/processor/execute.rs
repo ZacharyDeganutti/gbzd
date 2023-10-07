@@ -13,17 +13,17 @@ impl Cpu {
     fn byte_operand(&mut self) -> Byte {
         let address = self.registers.read_word(WordRegisterName::RegPC);
         let mut memory = self.memory.borrow_mut();
-        unsafe { memory.read::<Byte>(address + 1) }
+        memory.read::<Byte>(address + 1)
     } 
     fn word_operand(&mut self) -> Word {
         let address = self.registers.read_word(WordRegisterName::RegPC);
         let mut memory = self.memory.borrow_mut();
-        unsafe { memory.read::<Word>(address + 1) }
+        memory.read::<Word>(address + 1)
     } 
     fn fetch (&mut self) -> Byte {
         let address = self.registers.read_word(WordRegisterName::RegPC);
         let mut memory = self.memory.borrow_mut();
-        unsafe { memory.read(address) }
+        memory.read::<Byte>(address)
     }
 
     pub fn step(&mut self) -> u8 {

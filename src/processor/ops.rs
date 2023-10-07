@@ -52,14 +52,14 @@ impl Cpu {
         let address = new_stack_pointer;
         let contents = self.registers.read_word(register);
         let mut map = self.memory.borrow_mut();
-        unsafe { map.write(contents, address) };
+        map.write::<Word>(contents, address);
         self.registers.write_word(WordRegisterName::RegSP, new_stack_pointer);
     }
 
     pub fn pop(&mut self, register: WordRegisterName) {
         let address = self.registers.read_word(WordRegisterName::RegSP);
         let mut map = self.memory.borrow_mut();
-        let contents = unsafe { map.read(address) };
+        let contents = map.read::<Word>(address);
         match register {
             WordRegisterName::RegAF => {
                 // The flag register must overwrite its 4 lowest bits with 0 to be compliant

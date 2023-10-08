@@ -1,13 +1,10 @@
-use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::ByteExt;
 use crate::memory_gb::MemoryRegion;
-use crate::memory_gb::Signed;
 use crate::memory_gb::Word;
 use crate::processor::cpu::*;
 use crate::processor::cpu::ByteRegisterName::*;
 use crate::processor::cpu::WordRegisterName::*;
-use crate::processor::ops;
 
 impl Cpu {
     fn byte_operand(&mut self) -> Byte {
@@ -1305,7 +1302,7 @@ impl Cpu {
     }
 
     fn step_cb(&mut self, operand: Byte) -> u8 {
-        let instruction = self.fetch();
+        let instruction = operand;
         self.registers.step_pc(1);
         match instruction {
             0x00 => {

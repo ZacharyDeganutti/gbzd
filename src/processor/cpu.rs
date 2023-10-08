@@ -1,12 +1,9 @@
-use std::fmt::Write;
-use std::io::Read;
 use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
-use crate::memory_gb::EndianTranslate;
-use crate::memory_gb::Signed;
+use crate::memory_gb::MemoryBank;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryMap;
@@ -38,13 +35,14 @@ pub enum ByteRegisterName {
 #[derive(Clone, Copy)]
 pub enum WordRegisterName {
     RegAF = 0,
-    RegBC = 1,
-    RegDE = 2,
-    RegHL = 3,
-    RegSP = 4,
-    RegPC = 5,
+    RegBC = 2,
+    RegDE = 4,
+    RegHL = 6,
+    RegSP = 8,
+    RegPC = 10,
 }
 
+#[derive(Clone, Copy)]
 pub enum Flags {
     Z = 3,
     N = 2,
@@ -52,6 +50,7 @@ pub enum Flags {
     C = 0
 }
 
+#[derive(Clone, Copy)]
 pub enum ConditionCodes {
     C,
     NC,
@@ -60,7 +59,7 @@ pub enum ConditionCodes {
     NA
 }
 
-type MemoryMapRef = Rc<RefCell<MemoryMap>>;
+//type MemoryMapRef = Rc<RefCell<MemoryMap>>;
 
 // Trait for reading bytes from various Cpu sources
 pub trait ReadByte {
@@ -170,7 +169,7 @@ pub struct ByteImmediate {
     data: Byte,
 }
 impl ReadByte for ByteImmediate {
-    fn read_byte(&self, cpu: &mut Cpu) -> Byte {
+    fn read_byte(&self, _: &mut Cpu) -> Byte {
         self.data
     }
 }
@@ -228,7 +227,7 @@ pub struct WordImmediate {
     data: Word,
 }
 impl ReadWord for WordImmediate {
-    fn read_word(&self, cpu: &mut Cpu) -> Word {
+    fn read_word(&self, _: &mut Cpu) -> Word {
         self.data
     }
 }
@@ -255,7 +254,8 @@ impl WordImmediateIndirect {
 
 #[repr(C)]
 pub struct RegisterBank {
-    f: Byte,
+    // Registers are in the following order in memory
+    // REGISTER F
     // Flag register
     // +-+-+-+-+-+-+-+-+
     // |7|6|5|4|3|2|1|0|
@@ -266,23 +266,35 @@ pub struct RegisterBank {
     // N: Subtract flag, set if a subtraction was performed in the last math op
     // H: Half carry flag, set if a carry occurred from the lower nibble in the last math op
     // C: Carry flag, set if a carry occurred from the last math op or if register A is the smaller value when executing compare op
-    // AF paired
-    pub a: Byte,
+    // Can be paired with register A
+
+    // REGISTER A
     // Accumulator, typically used as destination for arithmetic ops
-    pub c: Byte,
-    pub b: Byte,
-    // BC paired, general purpose registers
-    pub e: Byte,
-    pub d: Byte,
-    // DE paired, general purpose registers
-    pub l: Byte,
-    pub h: Byte,
-    // HL paired, general purpose registers that can point into memory
-    pub sp: Address, // Stack pointer,  initialized to 0xFFFE
-    pub pc: Address, // Program counter, initialized to 0x100
+    // Can be paired with register F
+
+    // REGISTER BC 
+    // paired, general purpose registers
+
+    // REGISTER DE
+    // paired, general purpose registers
+
+    // REGISTER HL
+    // paired, general purpose registers that can point into memory
+
+    // REGISTER SP
+    // Stack pointer,  initialized to 0xFFFE, is exclusively a 16 bit register
+
+    // REGISTER PC
+    // Program counter, initialized to 0x100, is exclusively a 16 bit register
+
+    registers: [Byte; 12],
 }
 
-impl MemoryRegion for RegisterBank {}
+impl MemoryRegion for RegisterBank {
+    fn region_slice(&mut self, _: Address) -> crate::memory_gb::MemoryBank {
+        MemoryBank{ start: 0x0000, data: &mut self.registers[..] }
+    }
+}
 impl RegisterBank {
     pub fn read_byte(&mut self, register: ByteRegisterName) -> Byte {
         self.read::<Byte>(register as Address)
@@ -357,16 +369,21 @@ pub struct Cpu {
 impl Cpu {
     pub fn new(system_memory: Rc<RefCell<MemoryMap>>) -> Cpu {
         let regs = RegisterBank {
-            a: 0,
-            f: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 32,
-            h: 0,
-            l: 0,
-            sp: 0xFFFE.to_gb_endian(),
-            pc: 0x0100.to_gb_endian(),
+
+            registers: [
+                0x00, // A
+                0x00, // F
+                0x00, // B
+                0x00, // C
+                0x00, // D
+                0x00, // E
+                0x00, // H
+                0x00, // L
+                0xFE, // SP LOW
+                0xFF, // SP HIGH
+                0x00, // PC LOW
+                0x01, // PC HIGH
+            ]
         };
         Cpu { 
             registers: regs,

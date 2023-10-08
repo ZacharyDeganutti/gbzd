@@ -1,5 +1,4 @@
 use std::mem;
-use std::slice;
 
 const MAP_SIZE: usize = 0x10000; 
 
@@ -45,15 +44,50 @@ impl EndianTranslate for Word {
     }
 }
 
-pub trait MemoryUnit: EndianTranslate + Sized {}
-impl MemoryUnit for Byte {}
-impl MemoryUnit for Word {}
+pub trait MemoryUnit: EndianTranslate + Sized {
+    // type A : TryFrom<&'a [Byte]>;
+    type A;
+
+    fn copy_into_le_bytes(self, destination: &mut [Byte]) -> ();
+    fn from_le_bytes(bytes: &[Byte]) -> Self;
+}
+// These impls are probably good candidates for a macro
+impl MemoryUnit for Byte {
+    type A = [Byte; mem::size_of::<Self>()];
+    fn copy_into_le_bytes(self, destination: &mut [Byte]) -> () { 
+        let bytes = self.to_le_bytes();
+        destination.copy_from_slice(&bytes)
+    }
+
+    fn from_le_bytes(bytes: &[Byte]) -> Self {
+        Self::from_le_bytes(bytes.try_into().unwrap())
+    }
+}
+impl MemoryUnit for Word {
+    type A = [Byte; mem::size_of::<Self>()];
+    fn copy_into_le_bytes(self, destination: &mut [Byte]) -> () { 
+        let bytes = self.to_le_bytes();
+        destination.copy_from_slice(&bytes)
+    }
+
+    fn from_le_bytes(bytes: &[Byte]) -> Self {
+        Self::from_le_bytes(bytes.try_into().unwrap())
+    }
+}
+
+pub struct MemoryBank<'a> {
+    pub start: Address,
+    pub data: &'a mut [Byte]
+}
 
 // MemoryRegion structs should generally use #[repr(C)] and contain POD types to ensure understandable behavior 
 // MemoryRegion read/write are unsafe and need additional assurances when the MemoryRegion is smaller than the span of numbers that Address can represent
 //      These can be presumed safe only if the MemoryRegion is equal in size to the Address space of 0x10000
 //      Where are my dependent types?
+// pub trait MemoryRegion: SliceIndex<[Byte]> + Sized {
 pub trait MemoryRegion: Sized {
+    fn region_slice(&mut self, address: Address) -> MemoryBank;
+
     fn boundary_check<T: MemoryUnit>(&self, address: Address) -> () {
         let space = (std::mem::size_of::<Self>() as isize) - (address as isize);
         if space < (mem::size_of::<T>() as isize) {
@@ -73,29 +107,29 @@ pub trait MemoryRegion: Sized {
         }
     }
 
-    unsafe fn get_ptr<T: MemoryUnit>(&mut self, address: Address) -> *mut T {
-        mem::transmute::<*mut Byte, *mut T>((self as *mut Self as *mut Byte).offset(address as isize))
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
+        // self.boundary_check::<T>(from);
+        let bank = self.region_slice(address);
+        let adjusted_index = (address - bank.start) as usize; 
+        let read_slice = &bank.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+        T::from_le_bytes(read_slice)
     }
 
-    fn read<T: MemoryUnit>(&mut self, from: Address) -> T {
-        self.boundary_check::<T>(from);
-        unsafe {
-            let read_location =  self.get_ptr::<T>(from);
-            (*read_location).from_gb_endian()
-        }
-    }
-
-    fn write<T: MemoryUnit>(&mut self, value: T, to: Address) -> () {
-        self.boundary_check::<T>(to);
-        unsafe {
-            let write_location = self.get_ptr::<T>(to);
-            (*write_location) = value.to_gb_endian()
-        }
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+        // self.boundary_check::<T>(to);
+        let bank = self.region_slice(address);
+        let adjusted_index = (address - bank.start) as usize;
+        let destination_slice = &mut bank.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+        value.copy_into_le_bytes(destination_slice)
     }
 }
 
 // TODO: Override read and write to use virtual addressing against a structure full of MemoryRegions
-impl MemoryRegion for MemoryMap {}
+impl MemoryRegion for MemoryMap {
+    fn region_slice(&mut self, _: Address) -> MemoryBank {
+        MemoryBank { start: 0x0000, data: &mut self.memory[..] }
+    }
+}
 impl MemoryMap {
     pub fn new() -> MemoryMap {
         MemoryMap { memory: [0; MAP_SIZE] }

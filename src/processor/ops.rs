@@ -106,8 +106,8 @@ impl Cpu {
     // 0xE8 and 0xF8 are really the same operation with different destinations (HL/SP), so no duplication
     pub fn add_sp_i8(&mut self, destination: WordRegisterName, offset: Signed) {
         let sp_value = self.registers.read_word(WordRegisterName::RegSP);
-        let sp_upper = (sp_value & 0xFF00);
-        let sp_lower = (sp_value & 0x00FF);
+        let sp_upper = sp_value & 0xFF00;
+        let sp_lower = sp_value & 0x00FF;
         let abs_offset = offset.abs() as Byte;
         let (sum, half_carry, carry) = if offset < 0 {
             let (result, _, _, half_carry, carry) = self.byte_subtraction(sp_lower as Byte, abs_offset, false);
@@ -185,7 +185,7 @@ impl Cpu {
         let lhs = self.registers.read_byte(ByteRegisterName::RegA);
         let rhs = src.read_byte(self);
         
-        let (result, zero, negate, half_carry, carry) = self.byte_subtraction(lhs, rhs, false);
+        let (_, zero, negate, half_carry, carry) = self.byte_subtraction(lhs, rhs, false);
         
         self.registers.set_flag(Flags::Z, zero);
         self.registers.set_flag(Flags::N, negate);

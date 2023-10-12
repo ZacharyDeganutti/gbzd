@@ -23,7 +23,7 @@ impl Cpu {
         memory.read::<Byte>(address)
     }
 
-    pub fn step(&mut self) -> u8 {
+    pub fn step(&mut self) -> StepResult {
         let instruction = self.fetch();
 
         let cost = match instruction {
@@ -112,8 +112,9 @@ impl Cpu {
                 1
             }
             0x10 => {
-                self.registers.step_pc(1);
-                // TODO: STOP instruction
+                // Stop causes the following operation to be skipped so we just cheat here and say it's 2 wide
+                self.registers.step_pc(2); 
+                // Nothing else to do here, stop is implemented as a side effect
                 1
             }
             0x11 => {
@@ -1137,9 +1138,9 @@ impl Cpu {
                 if branched { 5 } else { 2 }
             }
             0xD9 => {
-                // TODO verify if reti = ret in practice
                 self.registers.step_pc(1);
                 self.ret(ConditionCodes::NA);
+                // RETI mostly behaves like RET, but has some associated side effects from enabling interrupts
                 4
             }
             0xDA => {
@@ -1243,7 +1244,7 @@ impl Cpu {
             }
             0xF3 => {
                 self.registers.step_pc(1);
-                // TODO: DI
+                // Don't need to do anything for DI here, this is handled as a side effect
                 1
             }
             0xF5 => {
@@ -1269,7 +1270,6 @@ impl Cpu {
                 3
             }
             0xF9 => {
-                // TODO verify if reti = ret in practice
                 self.registers.step_pc(1);
                 self.ld_word(WordRegister::new(RegSP), WordRegister::new(RegHL));
                 2
@@ -1282,7 +1282,7 @@ impl Cpu {
             }
             0xFB => {
                 self.registers.step_pc(1);
-                // TODO: EI
+                // Don't need to do anything for EI here, this is handled as a side effect
                 1
             }
             0xFE => {
@@ -1298,7 +1298,14 @@ impl Cpu {
             }
             _ => 0
         };
-        cost
+        match instruction {
+            0x10 => StepResult::StepSideEffect(cost, SideEffect::Stop),
+            0x76 => StepResult::StepSideEffect(cost, SideEffect::Halt),
+            0xD9 => StepResult::StepSideEffect(cost, SideEffect::EnableInterrupt),
+            0xF3 => StepResult::StepSideEffect(cost, SideEffect::DisableInterrupt),
+            0xFB => StepResult::StepSideEffect(cost, SideEffect::EnableInterruptDelayed),
+            _ => StepResult::Step(cost)
+        }
     }
 
     fn step_cb(&mut self, operand: Byte) -> u8 {

@@ -15,6 +15,7 @@ fn main() {
     println!("{}", cpu.registers.read_word(WordRegisterName::RegPC));
 
     let mut i = 0;
+    cpu.run();
     loop {
         print!("{}\n", i);
         cpu.step();

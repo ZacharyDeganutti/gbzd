@@ -59,7 +59,7 @@ pub enum ConditionCodes {
     NA
 }
 
-//type MemoryMapRef = Rc<RefCell<MemoryMap>>;
+type MemoryMapRef = Rc<RefCell<MemoryMap>>;
 
 // Trait for reading bytes from various Cpu sources
 pub trait ReadByte {
@@ -361,9 +361,25 @@ impl RegisterBank {
     }
 }
 
+pub enum SideEffect {
+    Halt,
+    Stop,
+    EnableInterrupt,
+    EnableInterruptDelayed,
+    DisableInterrupt,
+}
+
+pub enum StepResult {
+    Step(u8),
+    StepSideEffect(u8, SideEffect),
+}
+
 pub struct Cpu {
     pub registers: RegisterBank,
-    pub memory: Rc<RefCell<MemoryMap>>
+    pub memory: Rc<RefCell<MemoryMap>>,
+    pub ime: bool,
+    pub halted: bool,
+    pub stopped: bool
 }
 
 impl Cpu {
@@ -387,7 +403,108 @@ impl Cpu {
         };
         Cpu { 
             registers: regs,
-            memory: system_memory
+            memory: system_memory,
+            ime: false,
+            halted: false,
+            stopped: false,
+        }
+    }
+
+    pub fn service_interrupt(&mut self) -> bool {
+        // Check if there are serviceable interrupts and if there are, toggle off the highest priority IF bit
+        // and hand back the ISR address of the associated interrupt to jump to
+        let isr_location = {
+            let mut memory = self.memory.borrow_mut();
+            const IF_REG_ADDR: Address = 0xFF0F;
+            const IE_REG_ADDR: Address = 0xFFFF;
+            let reg_if = memory.read::<Byte>(IF_REG_ADDR);
+            let reg_ie = memory.read::<Byte>(IE_REG_ADDR);
+            let has_serviceable_interrupts = self.ime && ((reg_ie & reg_if) > 0);
+            if has_serviceable_interrupts {
+                let place = 0x01;
+                let (new_if, isr_location) = if (reg_if & (place << 0)) > 0 {
+                    const VBLANK_ISR_LOCATION: Address = 0x0040;
+                    (!(place << 0) & reg_if, VBLANK_ISR_LOCATION)
+                }
+                else if (reg_if & (place << 1)) > 0 {
+                    const STAT_ISR_LOCATION: Address = 0x0048;
+                    (!(place << 1) & reg_if, STAT_ISR_LOCATION)
+                }
+                else if (reg_if & (place << 2)) > 0 {
+                    const TIMER_ISR_LOCATION: Address = 0x0050;
+                    (!(place << 2) & reg_if, TIMER_ISR_LOCATION)
+                }
+                else if (reg_if & (place << 3)) > 0 {
+                    const SERIAL_ISR_LOCATION: Address = 0x0058;
+                    (!(place << 3) & reg_if, SERIAL_ISR_LOCATION)
+                }
+                else {
+                    const JOYPAD_ISR_LOCATION: Address = 0x0060;
+                    (!(place << 4) & reg_if, JOYPAD_ISR_LOCATION)
+                };
+                memory.write::<Byte>(new_if, IF_REG_ADDR);
+                Some(isr_location)
+            } else {
+                None
+            }
+        };
+        // If an interrupt is to be serviced, toggle off master interrupt enable, push PC, and jump PC to ISR address
+        match isr_location {
+            Some(address) => {
+                self.ime = false;
+                self.call(address, ConditionCodes::NA);
+                true
+            }
+            None => {
+                false
+            }
+        }
+    }
+
+    pub fn run(&mut self) -> () {
+        let mut enable_ime_next_frame = false;
+        let mut enable_ime_this_frame = false;
+        loop {
+            if self.service_interrupt() {
+                self.halted = false;
+                self.stopped = false;
+                continue
+            }
+            if !self.halted && !self.stopped  {
+                // This song and dance needs to be done so that the IME is turned on only after the instruction following EI executes
+                if enable_ime_next_frame {
+                    enable_ime_next_frame = false;
+                    enable_ime_this_frame = true;
+                }
+                let step_info = self.step();
+                let cost = match step_info {
+                    StepResult::StepSideEffect(cost, effect) => {
+                        match effect {
+                            SideEffect::Halt => {
+                                self.halted = true;
+                            }
+                            SideEffect::Stop => {
+                                self.halted = true;
+                            }
+                            SideEffect::EnableInterrupt => {
+                                self.ime = true
+                            }
+                            SideEffect::EnableInterruptDelayed => {
+                                enable_ime_next_frame = true;
+                            }
+                            SideEffect::DisableInterrupt => {
+                                self.ime = false
+                            }
+                        }
+                        cost
+                    }
+                    StepResult::Step(cost) => cost
+                };
+                if enable_ime_this_frame {
+                    self.ime = true;
+                    enable_ime_this_frame = false;
+                }
+            } 
         }
     }
 }

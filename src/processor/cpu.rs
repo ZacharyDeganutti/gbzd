@@ -291,7 +291,7 @@ pub struct RegisterBank {
 }
 
 impl MemoryRegion for RegisterBank {
-    fn region_slice(&mut self, _: Address) -> crate::memory_gb::MemoryBank {
+    fn get_bank(&mut self, _: Address) -> crate::memory_gb::MemoryBank {
         MemoryBank{ start: 0x0000, data: &mut self.registers[..] }
     }
 }

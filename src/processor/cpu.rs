@@ -59,7 +59,7 @@ pub enum ConditionCodes {
     NA
 }
 
-type MemoryMapRef = Rc<RefCell<MemoryMap>>;
+// type MemoryMapRef = Rc<RefCell<MemoryMap>>;
 
 // Trait for reading bytes from various Cpu sources
 pub trait ReadByte {
@@ -291,8 +291,12 @@ pub struct RegisterBank {
 }
 
 impl MemoryRegion for RegisterBank {
-    fn get_bank(&mut self, _: Address) -> crate::memory_gb::MemoryBank {
-        MemoryBank{ start: 0x0000, data: &mut self.registers[..] }
+    fn get_bank(&mut self, address: Address) -> Option<crate::memory_gb::MemoryBank> {
+        if address > WordRegisterName::RegPC as Address {
+            None
+        } else {
+            Some(MemoryBank{ start: 0x0000, data: &mut self.registers[..] })
+        }
     }
 }
 impl RegisterBank {

@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::MemoryBank;
+use crate::memory_gb::MemoryUnit;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryMap;
@@ -361,7 +362,7 @@ impl RegisterBank {
 
     pub fn step_pc(&mut self, increment: u16) {
         let pc = self.read_word(WordRegisterName::RegPC);
-        println!("pc: {:#02x}", pc);
+        // println!("pc: {:#02x}", pc);
         self.write_word(WordRegisterName::RegPC, pc + increment);
     }
 }
@@ -390,16 +391,16 @@ pub struct Cpu {
 impl Cpu {
     pub fn new(system_memory: Rc<RefCell<MemoryMap>>) -> Cpu {
         let regs = RegisterBank {
-
+            // Initial values set to match test logs
             registers: [
-                0x00, // A
-                0x00, // F
+                0xB0, // F
+                0x01, // A
+                0x13, // C
                 0x00, // B
-                0x00, // C
+                0xD8, // E
                 0x00, // D
-                0x00, // E
-                0x00, // H
-                0x00, // L
+                0x4D, // L
+                0x01, // H
                 0xFE, // SP LOW
                 0xFF, // SP HIGH
                 0x00, // PC LOW
@@ -473,6 +474,29 @@ impl Cpu {
         let mut enable_ime_next_frame = false;
         let mut enable_ime_this_frame = false;
         loop {
+            // log state
+            /*
+            {
+                let mut mem = self.memory.borrow_mut();
+                let dbg_pc = self.registers.read_word(WordRegisterName::RegPC);
+                println!("A: {} F: {} B: {} C: {} D: {} E: {} H: {} L: {} SP: {} PC: 00:{} ({} {} {} {})",
+                    self.registers.read_byte(ByteRegisterName::RegA).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegF).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegB).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegC).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegD).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegE).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegH).as_hex(),
+                    self.registers.read_byte(ByteRegisterName::RegL).as_hex(),
+                    self.registers.read_word(WordRegisterName::RegSP).as_hex(),
+                    dbg_pc.as_hex(), 
+                    mem.read::<Byte>(dbg_pc).as_hex(),
+                    mem.read::<Byte>(dbg_pc + 1).as_hex(),
+                    mem.read::<Byte>(dbg_pc + 2).as_hex(),
+                    mem.read::<Byte>(dbg_pc + 3).as_hex()
+                );
+            }
+            */
             if self.service_interrupt() {
                 self.halted = false;
                 self.stopped = false;

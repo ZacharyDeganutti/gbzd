@@ -86,7 +86,7 @@ impl Cpu {
         let half_carry = ((lhs & 0x0F).wrapping_add(rhs & 0x0F).wrapping_add(prior_carry)) > 0x0F;
         let carry = ((lhs & 0xFF).wrapping_add(rhs & 0xFF).wrapping_add(prior_carry)) > 0xFF ;
         
-        (result as Byte, zero, negate, half_carry, carry)
+        ((result & 0xFF) as Byte, zero, negate, half_carry, carry)
     }
 
     pub fn add_byte<T: ReadByte>(&mut self, src: T, with_carry: bool) {
@@ -110,12 +110,14 @@ impl Cpu {
         let sp_lower = sp_value & 0x00FF;
         let abs_offset = offset.abs() as Byte;
         let (sum, half_carry, carry) = if offset < 0 {
-            let (result, _, _, half_carry, carry) = self.byte_subtraction(sp_lower as Byte, abs_offset, false);
-            let sum = (sp_upper - (carry as u16)) | (result as u16);
-            (sum, half_carry, carry)
+            // hack, use 2s complement addition for setting carry/half carry, subtract absolute value for numerical value
+            let (_, _, _, true_half_carry, true_carry) = self.byte_addition(sp_lower as Byte, !(abs_offset)+1, false);
+            let (result, _, _, _, carry) = self.byte_subtraction(sp_lower as Byte, abs_offset, false);
+            let sum = (sp_upper.wrapping_sub((carry as u16) << 8)) | (result as u16);
+            (sum, true_half_carry, true_carry)
         } else {
             let (result, _, _, half_carry, carry) = self.byte_addition(sp_lower as Byte, abs_offset, false);
-            let sum = (sp_upper + (carry as u16)) | (result as u16);
+            let sum = (sp_upper.wrapping_add((carry as u16) << 8)) | (result as u16);
             (sum, half_carry, carry)
         };
 
@@ -131,9 +133,9 @@ impl Cpu {
         let lhs = self.registers.read_word(WordRegisterName::RegHL);
         let rhs = operand.read_word(self);
         let lhs_lower = (lhs & 0x00FF) as Byte;
-        let lhs_upper = ((lhs & 0xFF00) >> 4) as Byte;
+        let lhs_upper = ((lhs & 0xFF00) >> 8) as Byte;
         let rhs_lower = (rhs & 0x00FF) as Byte;
-        let rhs_upper = ((rhs & 0xFF00) >> 4) as Byte;
+        let rhs_upper = ((rhs & 0xFF00) >> 8) as Byte;
 
         let (lower_sum, _, _, lower_half_carry, lower_carry) = self.byte_addition(lhs_lower, rhs_lower, false);
 
@@ -146,7 +148,7 @@ impl Cpu {
         self.registers.set_flag(Flags::H, upper_half_carry);
         self.registers.set_flag(Flags::C, upper_carry);
 
-        let sum = ((upper_sum as Word) << 4) | (lower_sum as Word);
+        let sum = ((upper_sum as Word) << 8) | (lower_sum as Word);
 
         self.registers.write_word(WordRegisterName::RegHL, sum);
     }
@@ -155,16 +157,16 @@ impl Cpu {
     // Returns a tuple of the result and the flags that would be set as a result of subtracting
     // Some operations may not actually set all of these flags
     fn byte_subtraction(&mut self, lhs: Byte, rhs: Byte, with_carry: bool) -> (Byte, bool, bool, bool, bool) {
-        let lhs = ( lhs as u16 ) << 8;
-        let rhs = ( rhs as u16) << 8;
 
-        let prior_carry = if with_carry { (self.registers.check_flag(Flags::C) as u16) << 8 } else { 0 };
+        let prior_carry = if with_carry { self.registers.check_flag(Flags::C) as u8 } else { 0 };
         let result = lhs.wrapping_sub(rhs).wrapping_sub(prior_carry);
-        let zero = (result & 0xFF00) == 0;
+        let zero = result == 0;
         let negate = true;
-        let half_carry = ((lhs & 0xF000).wrapping_sub(rhs & 0xF000).wrapping_sub(prior_carry)) < 0xF000;
-        let carry = ((lhs & 0xFF00).wrapping_sub(rhs & 0xFF00).wrapping_sub(prior_carry)) < 0xFF00 ;
-        ((result >> 8) as Byte, zero, negate, half_carry, carry)
+        // let half_carry = ((lhs & 0xF000).wrapping_sub(rhs & 0xF000).wrapping_sub(prior_carry)) < 0xF000;
+        // let carry = ((lhs & 0xFF00).wrapping_sub(rhs & 0xFF00).wrapping_sub(prior_carry)) < 0xFF00 ;
+        let half_carry = (lhs & 0xf) < (rhs & 0xf);
+        let carry = lhs < rhs;
+        (result as Byte, zero, negate, half_carry, carry)
     }
 
     pub fn sub_byte<T: ReadByte>(&mut self, src: T, with_carry: bool) {
@@ -494,17 +496,17 @@ impl Cpu {
         if !previous_n_flag {
             if previous_carry || (result > 0x99) {
                 new_carry = true;
-                result += 0x60;
+                result = result.wrapping_add(0x60);
             }
             if previous_half_carry || ((result & 0x0f) > 0x09) {
-                result += 0x6;
+                result = result.wrapping_add(0x6);
             }
         } else {
             if previous_carry {
-                result -= 0x60;
+                result = result.wrapping_sub(0x60);
             }
             if previous_half_carry {
-                result -= 0x6;
+                result = result.wrapping_sub(0x6);
             }
         }
             

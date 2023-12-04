@@ -11,10 +11,10 @@ use std::cell::RefCell;
 use crate::processor::cpu::*;
 
 fn main() {
-    let cart = cart::Cart::load_from_file("roms/cpu_instrs.gb").expect("Problem with ROM file");
+    let cart = cart::Cart::load_from_file("roms/03-op sp,hl.gb").expect("Problem with ROM file");
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(cart)));
     let mut cpu = Cpu::new(system_memory.clone());
-    println!("{}", cpu.registers.read_word(WordRegisterName::RegPC));
+    //println!("{}", cpu.registers.read_word(WordRegisterName::RegPC));
 
     cpu.run();
     // let mut i = 0;

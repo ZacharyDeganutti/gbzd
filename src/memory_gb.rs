@@ -45,6 +45,8 @@ pub trait MemoryUnit: EndianTranslate + Sized + TryInto<u8> {
     fn copy_into_le_bytes(self, destination: &mut [Byte]) -> ();
     fn from_le_bytes(bytes: &[Byte]) -> Self;
     fn invalid_read_value() -> Self;
+    fn as_ascii(self) -> String;
+    fn as_hex(self) -> String;
 }
 
 // These impls are probably good candidates for a macro
@@ -62,6 +64,20 @@ impl MemoryUnit for Byte {
     fn invalid_read_value() -> Self {
         0xFF
     }
+
+    fn as_ascii(self) -> String {
+        let borrowed_bytes = &self.to_le_bytes();
+        let ascii = std::str::from_utf8(borrowed_bytes).unwrap_or("?");
+        String::from(ascii)
+    }
+
+    fn as_hex(self) -> String {
+        let bytes = self.to_le_bytes().to_vec();
+        bytes.iter()
+            .map(|b| format!("{:02x}", b).to_string().to_ascii_uppercase())
+            .rev()
+            .collect::<String>()
+    }
 }
 impl MemoryUnit for Word {
     type A = [Byte; mem::size_of::<Self>()];
@@ -76,6 +92,20 @@ impl MemoryUnit for Word {
 
     fn invalid_read_value() -> Self {
         0xFFFF
+    }
+
+    fn as_ascii(self) -> String {
+        let borrowed_bytes = &self.to_le_bytes();
+        let ascii = std::str::from_utf8(borrowed_bytes).unwrap_or("?");
+        String::from(ascii)
+    }
+
+    fn as_hex(self) -> String {
+        let bytes = self.to_le_bytes().to_vec();
+        bytes.iter()
+            .map(|b| format!("{:02x}", b).to_string().to_ascii_uppercase())
+            .rev()
+            .collect::<String>()
     }
 }
 
@@ -100,11 +130,11 @@ pub trait MemoryRegion {
         
     }
 
-    fn _write<T: MemoryUnit + std::fmt::Debug>(&mut self, value: T, address: Address) -> () {
+    fn _write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
         let bank_query = self.get_bank(address);
         if address == 0xFF01 {
-            let a = value;
-            println!("serial: {:?}", a);
+            let a = value.as_ascii();
+            print!("{}", a);
         }
         match bank_query {
             Some(bank) => {
@@ -120,7 +150,7 @@ pub trait MemoryRegion {
         self._read::<T>(address)
     }
 
-    fn write<T: MemoryUnit + std::fmt::Debug>(&mut self, value: T, address: Address) -> () {
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
         self._write::<T>(value, address)
     }
 }

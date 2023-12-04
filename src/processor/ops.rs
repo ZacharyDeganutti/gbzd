@@ -16,28 +16,28 @@ impl Cpu {
     pub fn ld_byte_0x22(&mut self) {
         self.ld_byte(ByteRegisterIndirect::new(WordRegisterName::RegHL), ByteRegister::new(ByteRegisterName::RegA));
         let pre_increment = self.registers.read_word(WordRegisterName::RegHL);
-        self.registers.write_word(WordRegisterName::RegHL, pre_increment + 1);
+        self.registers.write_word(WordRegisterName::RegHL, pre_increment.wrapping_add(1));
     }
 
     // Indirect load from address in register HL into register A. Increment HL afterwards
     pub fn ld_byte_0x2a(&mut self) {
         self.ld_byte(ByteRegister::new(ByteRegisterName::RegA), ByteRegisterIndirect::new(WordRegisterName::RegHL));
         let pre_increment = self.registers.read_word(WordRegisterName::RegHL);
-        self.registers.write_word(WordRegisterName::RegHL, pre_increment + 1);
+        self.registers.write_word(WordRegisterName::RegHL, pre_increment.wrapping_add(1));
     }
 
     // Indirect load from register A into address in register HL. Decrement HL afterwards
     pub fn ld_byte_0x32(&mut self) {
         self.ld_byte(ByteRegisterIndirect::new(WordRegisterName::RegHL), ByteRegister::new(ByteRegisterName::RegA));
         let pre_decrement = self.registers.read_word(WordRegisterName::RegHL);
-        self.registers.write_word(WordRegisterName::RegHL, pre_decrement - 1);
+        self.registers.write_word(WordRegisterName::RegHL, pre_decrement.wrapping_sub(1));
     }
 
     // Indirect load from address in register HL into register A. Decrement HL afterwards
     pub fn ld_byte_0x3a(&mut self) {
         self.ld_byte(ByteRegister::new(ByteRegisterName::RegA), ByteRegisterIndirect::new(WordRegisterName::RegHL));
         let pre_decrement = self.registers.read_word(WordRegisterName::RegHL);
-        self.registers.write_word(WordRegisterName::RegHL, pre_decrement - 1);
+        self.registers.write_word(WordRegisterName::RegHL, pre_decrement.wrapping_sub(1));
     }
 
     pub fn ld_word<T: WriteWord, U: ReadWord>(&mut self, dest: T, src: U) {
@@ -69,22 +69,22 @@ impl Cpu {
                 self.registers.write_word(register, contents);
             }
         }
-        self.registers.write_word(WordRegisterName::RegSP, address + 2);
+        self.registers.write_word(WordRegisterName::RegSP, address.wrapping_add(2));
     }
 
     // Byte addition, can specify whether the existing carry flag will be incorporated
     // Returns a tuple of the result and the flags that would be set as a result of adding
     // Some operations may not actually set all of these flags
     fn byte_addition(&mut self, lhs: Byte, rhs: Byte, with_carry: bool) -> (Byte, bool, bool, bool, bool) {
-        let lhs: u16 = lhs as u16;
+        let lhs = lhs as u16;
         let rhs = rhs as u16;
 
         let prior_carry = if with_carry { self.registers.check_flag(Flags::C) as u16 } else { 0 };
-        let result = lhs + rhs + prior_carry;
-        let zero = result == 0;
+        let result = lhs.wrapping_add(rhs).wrapping_add(prior_carry);
+        let zero = (result & 0xFF) == 0;
         let negate: bool = false;
-        let half_carry = ((lhs & 0x0F) + (rhs & 0x0F) + prior_carry) > 0x0F;
-        let carry = ((lhs & 0xFF) + (rhs & 0xFF) + prior_carry) > 0xFF ;
+        let half_carry = ((lhs & 0x0F).wrapping_add(rhs & 0x0F).wrapping_add(prior_carry)) > 0x0F;
+        let carry = ((lhs & 0xFF).wrapping_add(rhs & 0xFF).wrapping_add(prior_carry)) > 0xFF ;
         
         (result as Byte, zero, negate, half_carry, carry)
     }
@@ -155,15 +155,15 @@ impl Cpu {
     // Returns a tuple of the result and the flags that would be set as a result of subtracting
     // Some operations may not actually set all of these flags
     fn byte_subtraction(&mut self, lhs: Byte, rhs: Byte, with_carry: bool) -> (Byte, bool, bool, bool, bool) {
-        let lhs: u16 = ( lhs as u16 ) << 8;
+        let lhs = ( lhs as u16 ) << 8;
         let rhs = ( rhs as u16) << 8;
 
         let prior_carry = if with_carry { (self.registers.check_flag(Flags::C) as u16) << 8 } else { 0 };
-        let result = lhs - rhs - prior_carry;
-        let zero = result == 0;
+        let result = lhs.wrapping_sub(rhs).wrapping_sub(prior_carry);
+        let zero = (result & 0xFF00) == 0;
         let negate = true;
-        let half_carry = ((lhs & 0xF000) - (rhs & 0xF000) - prior_carry) < 0xF000;
-        let carry = ((lhs & 0xFF00) - (rhs & 0xFF00) + prior_carry) < 0xFF00 ;
+        let half_carry = ((lhs & 0xF000).wrapping_sub(rhs & 0xF000).wrapping_sub(prior_carry)) < 0xF000;
+        let carry = ((lhs & 0xFF00).wrapping_sub(rhs & 0xFF00).wrapping_sub(prior_carry)) < 0xFF00 ;
         ((result >> 8) as Byte, zero, negate, half_carry, carry)
     }
 
@@ -248,7 +248,7 @@ impl Cpu {
 
     pub fn inc_word<T: ReadWord + WriteWord>(&mut self, operand: T) {
         let pre_increment = operand.read_word(self);
-        let post_increment = pre_increment + 1;
+        let post_increment = pre_increment.wrapping_add(1);
 
         operand.write_word(self, post_increment);
     }
@@ -266,7 +266,7 @@ impl Cpu {
 
     pub fn dec_word<T: ReadWord + WriteWord>(&mut self, operand: T) {
         let pre_decrement = operand.read_word(self);
-        let post_decrement = pre_decrement + 1;
+        let post_decrement = pre_decrement.wrapping_sub(1);
 
         operand.write_word(self, post_decrement);
     }
@@ -287,7 +287,7 @@ impl Cpu {
             let current_address = self.registers.read_word(WordRegisterName::RegPC);
             let address = current_address.checked_add_signed(offset as i16).unwrap();
 
-            self.registers.write_word(WordRegisterName::RegSP, address);
+            self.registers.write_word(WordRegisterName::RegPC, address);
             true
         } else {
             false

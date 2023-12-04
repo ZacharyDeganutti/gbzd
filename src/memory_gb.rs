@@ -39,8 +39,7 @@ impl EndianTranslate for Word {
     }
 }
 
-pub trait MemoryUnit: EndianTranslate + Sized {
-    // type A : TryFrom<&'a [Byte]>;
+pub trait MemoryUnit: EndianTranslate + Sized + TryInto<u8> {
     type A;
 
     fn copy_into_le_bytes(self, destination: &mut [Byte]) -> ();
@@ -101,8 +100,12 @@ pub trait MemoryRegion {
         
     }
 
-    fn _write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+    fn _write<T: MemoryUnit + std::fmt::Debug>(&mut self, value: T, address: Address) -> () {
         let bank_query = self.get_bank(address);
+        if address == 0xFF01 {
+            let a = value;
+            println!("serial: {:?}", a);
+        }
         match bank_query {
             Some(bank) => {
                 let adjusted_index = (address - bank.start) as usize;
@@ -117,7 +120,7 @@ pub trait MemoryRegion {
         self._read::<T>(address)
     }
 
-    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+    fn write<T: MemoryUnit + std::fmt::Debug>(&mut self, value: T, address: Address) -> () {
         self._write::<T>(value, address)
     }
 }
@@ -174,7 +177,7 @@ impl MemoryRegion for MemoryMap {
             Some(MemoryBank { start: OAM_START as Address, data: &mut self.oam[..] })
         }
         else if _address >= ECHORAM_START {
-            Some(MemoryBank { start: OAM_START as Address, data: &mut self.echo_ram[..] })
+            Some(MemoryBank { start: ECHORAM_START as Address, data: &mut self.echo_ram[..] })
         }
         else if _address >= WRAM_S_START {
             Some(MemoryBank { start: WRAM_S_START as Address, data: &mut self.work_ram_swappable[..] })

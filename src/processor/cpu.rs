@@ -361,6 +361,7 @@ impl RegisterBank {
 
     pub fn step_pc(&mut self, increment: u16) {
         let pc = self.read_word(WordRegisterName::RegPC);
+        println!("pc: {:#02x}", pc);
         self.write_word(WordRegisterName::RegPC, pc + increment);
     }
 }
@@ -405,13 +406,16 @@ impl Cpu {
                 0x01, // PC HIGH
             ]
         };
-        Cpu { 
+        let mut new_cpu = Cpu { 
             registers: regs,
             memory: system_memory,
             ime: false,
             halted: false,
             stopped: false,
-        }
+        };
+        // TODO: Clean out after PPU is implemented. Cheat V-blank on 
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF44), ByteImmediate::new(0x90));
+        new_cpu
     }
 
     pub fn service_interrupt(&mut self) -> bool {

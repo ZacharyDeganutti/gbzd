@@ -162,10 +162,8 @@ impl Cpu {
         let result = lhs.wrapping_sub(rhs).wrapping_sub(prior_carry);
         let zero = result == 0;
         let negate = true;
-        // let half_carry = ((lhs & 0xF000).wrapping_sub(rhs & 0xF000).wrapping_sub(prior_carry)) < 0xF000;
-        // let carry = ((lhs & 0xFF00).wrapping_sub(rhs & 0xFF00).wrapping_sub(prior_carry)) < 0xFF00 ;
-        let half_carry = (lhs & 0xf) < (rhs & 0xf);
-        let carry = lhs < rhs;
+        let half_carry = ((lhs & 0xf).wrapping_sub(rhs & 0xf).wrapping_sub(prior_carry) & 0x10) != 0;
+        let carry = (lhs as u16 & 0xff) < (rhs as u16 & 0xff).wrapping_add(prior_carry as u16);
         (result as Byte, zero, negate, half_carry, carry)
     }
 
@@ -513,7 +511,7 @@ impl Cpu {
         let previous_carry = self.registers.check_flag(Flags::C);
         let previous_half_carry = self.registers.check_flag(Flags::H);
 
-        let mut new_carry: bool = false;
+        let mut new_carry: bool = previous_carry;
         let mut result = original_value;
         if !previous_n_flag {
             if previous_carry || (result > 0x99) {

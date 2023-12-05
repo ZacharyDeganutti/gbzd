@@ -357,6 +357,11 @@ impl Cpu {
         item.write_byte(self, new_value);
     }
 
+    pub fn rla(&mut self) {
+        self.rl(ByteRegister::new(ByteRegisterName::RegA));
+        self.registers.set_flag_off(Flags::Z);
+    }
+
     pub fn rr<T: ReadByte + WriteByte>(&mut self, item: T) {
         let original_value = item.read_byte(self);
         let end = original_value & 1;
@@ -370,6 +375,11 @@ impl Cpu {
         self.registers.set_flag(Flags::C, end > 0);
 
         item.write_byte(self, new_value);
+    }
+
+    pub fn rra(&mut self) {
+        self.rr(ByteRegister::new(ByteRegisterName::RegA));
+        self.registers.set_flag_off(Flags::Z);
     }
 
     pub fn rlc<T: ReadByte + WriteByte>(&mut self, item: T) {
@@ -386,6 +396,11 @@ impl Cpu {
         item.write_byte(self, new_value);
     }
 
+    pub fn rlca(&mut self) {
+        self.rlc(ByteRegister::new(ByteRegisterName::RegA));
+        self.registers.set_flag_off(Flags::Z);
+    }
+
     pub fn rrc<T: ReadByte + WriteByte>(&mut self, item: T) {
         let original_value = item.read_byte(self);
         let end = original_value & 1;
@@ -398,6 +413,11 @@ impl Cpu {
         self.registers.set_flag(Flags::C, end > 0);
 
         item.write_byte(self, new_value);
+    }
+
+    pub fn rrca(&mut self) {
+        self.rrc(ByteRegister::new(ByteRegisterName::RegA));
+        self.registers.set_flag_off(Flags::Z);
     }
 
     pub fn sla<T: ReadByte + WriteByte>(&mut self, item: T) {
@@ -448,7 +468,7 @@ impl Cpu {
         let high = original_value & 0xF0;
         let low = original_value & 0xF;
 
-        let new_value = (low << 4) | high;
+        let new_value = (low << 4) | (high >> 4);
 
         self.registers.set_flag(Flags::Z, new_value == 0);
         self.registers.set_flag_off(Flags::N);
@@ -459,9 +479,9 @@ impl Cpu {
     }
 
     pub fn bit<T: ReadByte>(&mut self, bit_position: u8, item: T) {
-        let value = item.read_byte(self) | (1 << bit_position);
-
-        self.registers.set_flag(Flags::Z, value > 0);
+        let value = item.read_byte(self) & (1 << bit_position);
+        // println!("Input {} bit {} is {}", item.read_byte(self), bit_position, value);
+        self.registers.set_flag(Flags::Z, value == 0);
         self.registers.set_flag_off(Flags::N);
         self.registers.set_flag_on(Flags::H);
     }
@@ -481,6 +501,8 @@ impl Cpu {
     }
 
     pub fn scf(&mut self) {
+        self.registers.set_flag_off(Flags::N);
+        self.registers.set_flag_off(Flags::H);
         self.registers.set_flag_on(Flags::C);
     }
 

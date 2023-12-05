@@ -66,7 +66,7 @@ impl Cpu {
             }
             0x07 => {
                 self.registers.step_pc(1);
-                self.rlc(ByteRegister::new(RegA));
+                self.rlca();
                 1
             }
             0x08 => {
@@ -108,7 +108,7 @@ impl Cpu {
             }
             0x0F => {
                 self.registers.step_pc(1);
-                self.rrc(ByteRegister::new(RegA));
+                self.rrca();
                 1
             }
             0x10 => {
@@ -151,7 +151,7 @@ impl Cpu {
             }
             0x17 => {
                 self.registers.step_pc(1);
-                self.rl(ByteRegister::new(RegA));
+                self.rla();
                 1
             }
             0x18 => {
@@ -193,7 +193,7 @@ impl Cpu {
             }
             0x1F => {
                 self.registers.step_pc(1);
-                self.rr(ByteRegister::new(RegA));
+                self.rra();
                 1
             }
             0x20 => {
@@ -1146,7 +1146,7 @@ impl Cpu {
             0xDA => {
                 let address = self.word_operand();
                 self.registers.step_pc(3);
-                let branched = self.jp(WordImmediate::new(address), ConditionCodes::Z);
+                let branched = self.jp(WordImmediate::new(address), ConditionCodes::C);
                 if branched { 4 } else { 3 }
             }
             0xDC => {

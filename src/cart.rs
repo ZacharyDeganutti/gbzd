@@ -1,8 +1,10 @@
 
 
+use crate::memory_gb;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::MemoryBank;
+use crate::memory_gb::BankType;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryUnit;
 
@@ -17,13 +19,12 @@ struct NoMBC {
 }
 
 impl MemoryRegion for NoMBC {
-    fn get_bank(&mut self, address: Address) -> Option<MemoryBank> {
-        if address < ROM_WIDTH as Address {
-            Some(MemoryBank { start: CART_BASE_ADDRESS as Address, data: &mut self.data[..] })
-        }
-        else {
-            None
-        }
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
+        memory_gb::read_from_buffer(&self.data, address + CART_BASE_ADDRESS as Address)
+    }
+
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+        // Writing has no function without MBC
     }
 }
 
@@ -35,25 +36,20 @@ struct MBC1 {
 }
 
 impl MemoryRegion for MBC1 {
-    fn get_bank(&mut self, address: Address) -> Option<MemoryBank> {
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
         const SWAPPABLE_BASE_ADDRESS: usize = 0x4000;
-        // ROM bank 1
-        if address < 0x4000 as Address {
-            Some(MemoryBank { start: CART_BASE_ADDRESS as Address, data: &mut self.data[CART_BASE_ADDRESS..BANK_WIDTH] })
+        // ROM bank 0
+        if address < SWAPPABLE_BASE_ADDRESS as Address {
+            memory_gb::read_from_buffer(&self.data, address)
         }
         // Swappable ROM bank
-        else if (address >= SWAPPABLE_BASE_ADDRESS as Address) && (address < 0x8000 ) {
-            let bank_lower = self.active_bank as usize * BANK_WIDTH;
-            let bank_upper = bank_lower + BANK_WIDTH;
-            Some(MemoryBank { 
-                start: bank_lower as Address,
-                data: &mut self.data[bank_lower..bank_upper]
-            })
-        } 
-        // TODO: Add more cases for finding and mapping RAM banks
         else {
-            None
-        }
+            // active_bank 0 and 1 are both treated as a 0 offset, active_bank 2 as a 1 offset, continued...
+            let bank_offset = (std::cmp::max(self.active_bank, 1) - 1) as usize;
+            let bank_adjusted_address = address + (bank_offset * BANK_WIDTH) as Address;
+            memory_gb::read_from_buffer(&self.data, bank_adjusted_address)
+        } 
+        // Let it panic if out of bounds somehow, probably indicates a mistake or exram access which is unsupported
     }
 
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
@@ -99,9 +95,11 @@ impl Cart {
         let contents = std::fs::read(path)?;
         let mapper = match contents[MAPPER_TYPE_LOCATION] {
             0x00 => {
+                println!("Loaded No MBC");
                 Ok(Mapper::NoMBC(NoMBC { data: contents }))
             }
             0x01 => {
+                println!("Loaded MBC1");
                 Ok(Mapper::MBC1(MBC1 { data: contents, active_bank: 1 }))
             }
             _ => {
@@ -114,13 +112,24 @@ impl Cart {
 }
 
 impl MemoryRegion for Cart {
-    fn get_bank(&mut self, address: Address) -> Option<MemoryBank> {
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
         match self.data {
-            Mapper::NoMBC(ref mut no_mbc) => {
-                no_mbc.get_bank(address)
+            Mapper::NoMBC(ref mut no_mbc_cart) => {
+                no_mbc_cart.read(address)
             }
-            Mapper::MBC1(ref mut mbc1) => {
-                mbc1.get_bank(address)
+            Mapper::MBC1(ref mut mbc1_cart) => {
+                mbc1_cart.read(address)
+            }
+        }
+    }
+
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+        match self.data {
+            Mapper::NoMBC(ref mut no_mbc_cart) => {
+                no_mbc_cart.write(value, address)
+            }
+            Mapper::MBC1(ref mut mbc1_cart) => {
+                mbc1_cart.write(value, address)
             }
         }
     }

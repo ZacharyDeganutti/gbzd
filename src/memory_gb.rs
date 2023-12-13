@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::cart::Cart;
+use crate::{cart::Cart, special_registers::Divider};
 
 pub type Byte = u8;
 pub type Word = u16;
@@ -109,49 +109,57 @@ impl MemoryUnit for Word {
     }
 }
 
+pub enum BankType {
+    RawBank,
+    CartBank,
+    DividerBank
+}
 pub struct MemoryBank<'a> {
     pub start: Address,
-    pub data: &'a mut [Byte]
+    pub data: &'a mut [Byte],
+    pub variant: BankType
 }
 
 pub trait MemoryRegion {
-    fn get_bank(&mut self, address: Address) -> Option<MemoryBank>;
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T;
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> ();
+}
 
-    fn _read<T: MemoryUnit>(&mut self, address: Address) -> T {
-        let bank_query = self.get_bank(address);
-        match bank_query {
-            Some(bank) => {
-                let adjusted_index = (address - bank.start) as usize; 
-                let read_slice = &bank.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
-                T::from_le_bytes(read_slice)
-            }
-            None => { T::invalid_read_value() } // Spit out some nonsense on invalid read
-        }
-        
-    }
+pub struct SimpleRegion<'a> {
+    pub start: Address,
+    pub data: &'a mut [Byte],
+}
 
-    fn _write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
-        let bank_query = self.get_bank(address);
-        if address == 0xFF01 {
-            let a = value.as_ascii();
-            print!("{}", a);
-        }
-        match bank_query {
-            Some(bank) => {
-                let adjusted_index = (address - bank.start) as usize;
-                let destination_slice = &mut bank.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
-                value.copy_into_le_bytes(destination_slice)
-            }
-            None => () // Do not write to undefined memory locations
-        }
-    }
+// Read from a given buffer at a specific address
+pub fn read_from_buffer<T: MemoryUnit>(buffer: &[u8], address: Address) -> T {
+    let adjusted_index = address as usize; 
+    let read_slice = &buffer[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+    T::from_le_bytes(read_slice)
+}
 
+// Write a value to a mutable buffer at a specific address
+pub fn write_to_buffer<T: MemoryUnit>(buffer: &mut [u8], value: T, address: Address) -> () {
+    let adjusted_index = address as usize;
+    let destination_slice = &mut buffer[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+    value.copy_into_le_bytes(destination_slice)
+}
+
+impl<'a> MemoryRegion for SimpleRegion<'a> {
     fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
-        self._read::<T>(address)
+        /*
+        let adjusted_index = (address - self.start) as usize; 
+        let read_slice = &self.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+        T::from_le_bytes(read_slice);
+        */
+        read_from_buffer(&self.data, address - self.start)
     }
-
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
-        self._write::<T>(value, address)
+        /*
+        let adjusted_index = (address - self.start) as usize;
+        let destination_slice = &mut self.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+        value.copy_into_le_bytes(destination_slice)
+        */
+        write_to_buffer(self.data, value, address - self.start)
     }
 }
 
@@ -173,8 +181,9 @@ const IE_START: usize = 0xFFFF;
 // TODO: revisit if repr(C) is necessary
 // TODO: hide rom, rom_swappable, external_ram behind cart abstraction
 #[repr(C)]
-pub struct MemoryMap { 
+pub struct MemoryMapData { 
     cart: Cart,
+    divider: Divider,
     vram: [Byte; EXRAM_START - VRAM_START],
     work_ram: [Byte; WRAM_S_START - WRAM_START],
     work_ram_swappable: [Byte; ECHORAM_START - WRAM_S_START],
@@ -186,53 +195,127 @@ pub struct MemoryMap {
     ie: [Byte; 1],
 }
 
+pub struct MemoryMap<'a> { 
+    cart: &'a mut Cart,
+    divider: &'a mut Divider,
+    vram: SimpleRegion<'a>,
+    work_ram: SimpleRegion<'a>,
+    work_ram_swappable: SimpleRegion<'a>,
+    echo_ram: SimpleRegion<'a>,
+    oam: SimpleRegion<'a>,
+    unusable: SimpleRegion<'a>,
+    io_registers: SimpleRegion<'a>,
+    hram: SimpleRegion<'a>,
+    ie: SimpleRegion<'a>,
+}
+
 // TODO: Override get_bank to implement mapped addressing against a structure full of MemoryRegions
-impl MemoryRegion for MemoryMap {
-    fn get_bank(&mut self, address: Address) -> Option<MemoryBank> {
-        // MemoryBank { start: 0x0000, data: &mut self.memory[..] }
+impl<'a> MemoryRegion for MemoryMap<'a> {
+
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
         let _address = address as usize;
         if _address == IE_START {
-            Some(MemoryBank { start: IE_START as Address, data: &mut self.ie[..] })
+            self.ie.read(address)
         }
         else if _address >= HRAM_START {
-            Some(MemoryBank { start: HRAM_START as Address, data: &mut self.hram[..] })
+            self.hram.read(address)
         }
         else if _address >= IOREGS_START {
-            Some(MemoryBank { start: IOREGS_START as Address, data: &mut self.io_registers[..] })
+            // Some registers have special behaviors
+            if address == 0xFF04 {
+                self.divider.read(address)
+            }
+            else {
+                self.io_registers.read(address)
+            }
         }
         else if _address >= UNUSABLE_START {
-            Some(MemoryBank { start: UNUSABLE_START as Address, data: &mut self.unusable[..] })
+            self.unusable.read(address)
         }
         else if _address >= OAM_START {
-            Some(MemoryBank { start: OAM_START as Address, data: &mut self.oam[..] })
+            self.oam.read(address)
         }
         else if _address >= ECHORAM_START {
-            Some(MemoryBank { start: ECHORAM_START as Address, data: &mut self.echo_ram[..] })
+            self.echo_ram.read(address)
         }
         else if _address >= WRAM_S_START {
-            Some(MemoryBank { start: WRAM_S_START as Address, data: &mut self.work_ram_swappable[..] })
+            self.work_ram_swappable.read(address)
         }
         else if _address >= WRAM_START {
-            Some(MemoryBank { start: WRAM_START as Address, data: &mut self.work_ram[..] })
+            self.work_ram.read(address)
         }
         else if _address >= EXRAM_START {
             // External RAM is on the cartridge
-            self.cart.get_bank(address)
+            self.cart.read(address)
         }
         else if _address >= VRAM_START {
-            Some(MemoryBank { start: VRAM_START as Address, data: &mut self.vram[..] })
+            // Likely to have a different BankType later
+            self.vram.read(address)
         }
         else {
             // The rest of the address space is mapped from the cartridge ROM
-            self.cart.get_bank(address)
+            self.cart.read(address)
+        } 
+    }
+
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+        // Hacky debug check that circumvents the usual BankType check, does not represent real functionality
+        if address == 0xFF01 {
+            let a = value.as_ascii();
+            print!("{}", a);
+        }
+        let _address = address as usize;
+        if _address == IE_START {
+            self.ie.write(value, address)
+        }
+        else if _address >= HRAM_START {
+            self.hram.write(value, address)
+        }
+        else if _address >= IOREGS_START {
+            // Some registers have special behaviors
+            if address == 0xFF04 {
+                self.divider.write(value, address)
+            }
+            else {
+                self.io_registers.write(value, address)
+            }
+        }
+        else if _address >= UNUSABLE_START {
+            self.unusable.write(value, address)
+        }
+        else if _address >= OAM_START {
+            self.oam.write(value, address)
+        }
+        else if _address >= ECHORAM_START {
+            self.echo_ram.write(value, address)
+        }
+        else if _address >= WRAM_S_START {
+            self.work_ram_swappable.write(value, address)
+        }
+        else if _address >= WRAM_START {
+            self.work_ram.write(value, address)
+        }
+        else if _address >= EXRAM_START {
+            // External RAM is on the cartridge
+            self.cart.write(value, address)
+        }
+        else if _address >= VRAM_START {
+            // Likely to have a different BankType later
+            self.vram.write(value, address)
+        }
+        else {
+            // The rest of the address space is mapped from the cartridge ROM
+            self.cart.write(value, address)
         }
     }
 }
 
-impl MemoryMap {
-    pub fn new(cart: Cart) -> MemoryMap {
-        MemoryMap { 
+impl<'a> MemoryMap<'a> {
+    pub fn allocate(cart: Cart) -> MemoryMapData {
+        let divider: Divider = Divider { data: [0x00; 2] };
+        MemoryMapData { 
             cart,
+            divider,
             vram: [0; EXRAM_START - VRAM_START],
             work_ram: [0; WRAM_S_START - WRAM_START],
             work_ram_swappable: [0; ECHORAM_START - WRAM_S_START],
@@ -242,6 +325,22 @@ impl MemoryMap {
             io_registers: [0; HRAM_START - IOREGS_START],
             hram: [0; IE_START - HRAM_START],
             ie: [0; 1],
+        }
+    }
+
+    pub fn new(data: &mut MemoryMapData) -> MemoryMap {
+        MemoryMap { 
+            cart: &mut data.cart,
+            divider: &mut data.divider,
+            vram: SimpleRegion { start: VRAM_START as Address, data: &mut data.vram },
+            work_ram: SimpleRegion { start: WRAM_START as Address, data: &mut data.work_ram },
+            work_ram_swappable: SimpleRegion { start: WRAM_S_START as Address, data: &mut data.work_ram_swappable },
+            echo_ram: SimpleRegion { start: ECHORAM_START as Address, data: &mut data.echo_ram },
+            oam: SimpleRegion { start: OAM_START as Address, data: &mut data.oam },
+            unusable: SimpleRegion { start: UNUSABLE_START as Address, data: &mut data.unusable },
+            io_registers: SimpleRegion { start: IOREGS_START as Address, data: &mut data.io_registers },
+            hram: SimpleRegion { start: HRAM_START as Address, data: &mut data.hram },
+            ie: SimpleRegion { start: IE_START as Address, data: &mut data.ie },
         }
     }
 }

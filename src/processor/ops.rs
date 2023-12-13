@@ -6,7 +6,7 @@ use crate::memory_gb::MemoryRegion;
 use crate::processor::cpu::*;
 
 
-impl Cpu {
+impl<'a> Cpu<'a> {
     pub fn ld_byte<T: WriteByte, U: ReadByte>(&mut self, dest: T, src: U) {
         let source_value = src.read_byte(self);
         dest.write_byte(self, source_value);

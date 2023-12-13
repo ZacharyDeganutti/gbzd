@@ -6,7 +6,7 @@ use crate::processor::cpu::*;
 use crate::processor::cpu::ByteRegisterName::*;
 use crate::processor::cpu::WordRegisterName::*;
 
-impl Cpu {
+impl<'a> Cpu<'a> {
     fn byte_operand(&mut self) -> Byte {
         let address = self.registers.read_word(WordRegisterName::RegPC);
         let mut memory = self.memory.borrow_mut();

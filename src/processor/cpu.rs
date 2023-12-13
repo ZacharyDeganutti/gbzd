@@ -1,9 +1,11 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
+use crate::memory_gb;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::MemoryBank;
+use crate::memory_gb::BankType;
 use crate::memory_gb::MemoryUnit;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
@@ -292,14 +294,15 @@ pub struct RegisterBank {
 }
 
 impl MemoryRegion for RegisterBank {
-    fn get_bank(&mut self, address: Address) -> Option<crate::memory_gb::MemoryBank> {
-        if address > WordRegisterName::RegPC as Address {
-            None
-        } else {
-            Some(MemoryBank{ start: 0x0000, data: &mut self.registers[..] })
-        }
+    fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
+        memory_gb::read_from_buffer(&self.registers, address)
+    }
+
+    fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+        memory_gb::write_to_buffer(&mut self.registers, value, address)
     }
 }
+
 impl RegisterBank {
     pub fn read_byte(&mut self, register: ByteRegisterName) -> Byte {
         self.read::<Byte>(register as Address)
@@ -380,15 +383,16 @@ pub enum StepResult {
     StepSideEffect(u8, SideEffect),
 }
 
-pub struct Cpu {
+pub struct Cpu<'a> {
     pub registers: RegisterBank,
-    pub memory: Rc<RefCell<MemoryMap>>,
+    pub memory: Rc<RefCell<MemoryMap<'a>>>,
     pub ime: bool,
     pub halted: bool,
-    pub stopped: bool
+    pub stopped: bool,
+    pub cycles_per_second: u32,
 }
 
-impl Cpu {
+impl<'a> Cpu<'a> {
     pub fn new(system_memory: Rc<RefCell<MemoryMap>>) -> Cpu {
         let regs = RegisterBank {
             // Initial values set to match test logs
@@ -407,19 +411,21 @@ impl Cpu {
                 0x01, // PC HIGH
             ]
         };
+        let cycles_per_second = 104826;
         let mut new_cpu = Cpu { 
             registers: regs,
             memory: system_memory,
             ime: false,
             halted: false,
             stopped: false,
+            cycles_per_second,
         };
         // TODO: Clean out after PPU is implemented. Cheat V-blank on 
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF44), ByteImmediate::new(0x90));
         new_cpu
     }
 
-    pub fn service_interrupt(&mut self) -> bool {
+    fn service_interrupt(&mut self) -> bool {
         // Check if there are serviceable interrupts and if there are, toggle off the highest priority IF bit
         // and hand back the ISR address of the associated interrupt to jump to
         let isr_location = {
@@ -468,6 +474,10 @@ impl Cpu {
                 false
             }
         }
+    }
+
+    fn tick_timer(&mut self) -> () {
+        
     }
 
     pub fn run(&mut self) -> () {
@@ -532,6 +542,10 @@ impl Cpu {
                     }
                     StepResult::Step(cost) => cost
                 };
+                // Step timers through the cpu cycles consumed on this iteration
+                for _ in 0..cost {
+                    self.tick_timer()
+                }
                 if enable_ime_this_frame {
                     self.ime = true;
                     enable_ime_this_frame = false;

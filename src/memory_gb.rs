@@ -197,7 +197,7 @@ pub struct MemoryMapData {
 
 pub struct MemoryMap<'a> { 
     cart: &'a mut Cart,
-    divider: &'a mut Divider,
+    pub divider: &'a mut Divider,
     vram: SimpleRegion<'a>,
     work_ram: SimpleRegion<'a>,
     work_ram_swappable: SimpleRegion<'a>,

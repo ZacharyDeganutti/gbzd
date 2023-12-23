@@ -477,7 +477,8 @@ impl<'a> Cpu<'a> {
     }
 
     fn tick_timer(&mut self) -> () {
-        
+        let mut mem = self.memory.borrow_mut();
+        mem.divider.increment()
     }
 
     pub fn run(&mut self) -> () {

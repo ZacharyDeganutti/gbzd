@@ -11,18 +11,18 @@ use crate::memory_gb::MemoryUnit;
 
 impl MemoryRegion for Divider {
     fn read<T: MemoryUnit>(&mut self, _: Address) -> T {
-        let read_slice = &self.data[0..mem::size_of::<T>()];
-        T::from_le_bytes(read_slice)
+        // The divider internally is 2 bytes, but only the top byte is exposed in the address space
+        T::from_le_bytes(&self.data[1..]) 
     }
 
-    // Front-end write for the Divider clears it to 0
+    // Writing directly to the divider clears it out
     fn write<T: MemoryUnit>(&mut self, _: T, _: Address) -> () {
         self.data = [0x00, 0x00]
     }
 }
 
 impl Divider {
-    fn increment<T: MemoryUnit>(&mut self, _: T, _: Address) -> () {
+    pub fn increment(&mut self) -> () {
         let value = Word::from_le_bytes(self.data);
         self.data = value.wrapping_add(1).to_le_bytes();
     }

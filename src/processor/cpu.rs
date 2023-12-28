@@ -436,26 +436,28 @@ impl<'a> Cpu<'a> {
             let reg_ie = memory.read::<Byte>(IE_REG_ADDR);
             let has_serviceable_interrupts = self.ime && ((reg_ie & reg_if) > 0);
             if has_serviceable_interrupts {
-                let place = 0x01;
-                let (new_if, isr_location) = if (reg_if & (place << 0)) > 0 {
+                //println!("Has serviceable!");
+                const PLACE: u8 = 0x01;
+                let (new_if, isr_location) = if (reg_if & (PLACE << 0)) > 0 {
                     const VBLANK_ISR_LOCATION: Address = 0x0040;
-                    (!(place << 0) & reg_if, VBLANK_ISR_LOCATION)
+                    (!(PLACE << 0) & reg_if, VBLANK_ISR_LOCATION)
                 }
-                else if (reg_if & (place << 1)) > 0 {
+                else if (reg_if & (PLACE << 1)) > 0 {
                     const STAT_ISR_LOCATION: Address = 0x0048;
-                    (!(place << 1) & reg_if, STAT_ISR_LOCATION)
+                    (!(PLACE << 1) & reg_if, STAT_ISR_LOCATION)
                 }
-                else if (reg_if & (place << 2)) > 0 {
+                else if (reg_if & (PLACE << 2)) > 0 {
+                    //println!("Service timer!");
                     const TIMER_ISR_LOCATION: Address = 0x0050;
-                    (!(place << 2) & reg_if, TIMER_ISR_LOCATION)
+                    (!(PLACE << 2) & reg_if, TIMER_ISR_LOCATION)
                 }
-                else if (reg_if & (place << 3)) > 0 {
+                else if (reg_if & (PLACE << 3)) > 0 {
                     const SERIAL_ISR_LOCATION: Address = 0x0058;
-                    (!(place << 3) & reg_if, SERIAL_ISR_LOCATION)
+                    (!(PLACE << 3) & reg_if, SERIAL_ISR_LOCATION)
                 }
                 else {
                     const JOYPAD_ISR_LOCATION: Address = 0x0060;
-                    (!(place << 4) & reg_if, JOYPAD_ISR_LOCATION)
+                    (!(PLACE << 4) & reg_if, JOYPAD_ISR_LOCATION)
                 };
                 memory.write::<Byte>(new_if, IF_REG_ADDR);
                 Some(isr_location)
@@ -478,7 +480,12 @@ impl<'a> Cpu<'a> {
 
     fn tick_timer(&mut self) -> () {
         let mut mem = self.memory.borrow_mut();
-        mem.divider.increment()
+        let fire_interrupt_ready_status = mem.timer.tick();
+        if fire_interrupt_ready_status {
+            //println!("Setting IF due to timer overflow! IME: {}", self.ime);
+            let if_value: Byte = mem.io_registers.read(0xFF0F);
+            mem.io_registers.write(if_value | 0x4, 0xFF0F);
+        }
     }
 
     pub fn run(&mut self) -> () {
@@ -544,7 +551,7 @@ impl<'a> Cpu<'a> {
                     StepResult::Step(cost) => cost
                 };
                 // Step timers through the cpu cycles consumed on this iteration
-                for _ in 0..cost {
+                for _ in 0..(4*cost) {
                     self.tick_timer()
                 }
                 if enable_ime_this_frame {

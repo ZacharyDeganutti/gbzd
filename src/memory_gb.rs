@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{cart::Cart, special_registers::Divider};
+use crate::{cart::Cart, special_registers::Timer};
 
 pub type Byte = u8;
 pub type Word = u16;
@@ -47,6 +47,8 @@ pub trait MemoryUnit: EndianTranslate + Sized + TryInto<u8> {
     fn invalid_read_value() -> Self;
     fn as_ascii(self) -> String;
     fn as_hex(self) -> String;
+    fn demote(self) -> Byte;
+    fn promote(byte: Byte) -> Self;
 }
 
 // These impls are probably good candidates for a macro
@@ -78,7 +80,16 @@ impl MemoryUnit for Byte {
             .rev()
             .collect::<String>()
     }
+
+    fn demote(self) -> Byte {
+        self
+    }
+
+    fn promote(byte: Byte) -> Self {
+        byte
+    }
 }
+
 impl MemoryUnit for Word {
     type A = [Byte; mem::size_of::<Self>()];
     fn copy_into_le_bytes(self, destination: &mut [Byte]) -> () { 
@@ -106,6 +117,14 @@ impl MemoryUnit for Word {
             .map(|b| format!("{:02x}", b).to_string().to_ascii_uppercase())
             .rev()
             .collect::<String>()
+    }
+
+    fn demote(self) -> Byte {
+        *self.to_le_bytes().to_vec().last().unwrap()
+    }
+
+    fn promote(byte: Byte) -> Self {
+        byte as Word
     }
 }
 
@@ -183,7 +202,7 @@ const IE_START: usize = 0xFFFF;
 #[repr(C)]
 pub struct MemoryMapData { 
     cart: Cart,
-    divider: Divider,
+    timer: Timer,
     vram: [Byte; EXRAM_START - VRAM_START],
     work_ram: [Byte; WRAM_S_START - WRAM_START],
     work_ram_swappable: [Byte; ECHORAM_START - WRAM_S_START],
@@ -197,14 +216,14 @@ pub struct MemoryMapData {
 
 pub struct MemoryMap<'a> { 
     cart: &'a mut Cart,
-    pub divider: &'a mut Divider,
+    pub timer: &'a mut Timer,
     vram: SimpleRegion<'a>,
     work_ram: SimpleRegion<'a>,
     work_ram_swappable: SimpleRegion<'a>,
     echo_ram: SimpleRegion<'a>,
     oam: SimpleRegion<'a>,
     unusable: SimpleRegion<'a>,
-    io_registers: SimpleRegion<'a>,
+    pub io_registers: SimpleRegion<'a>,
     hram: SimpleRegion<'a>,
     ie: SimpleRegion<'a>,
 }
@@ -223,7 +242,16 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
         else if _address >= IOREGS_START {
             // Some registers have special behaviors
             if address == 0xFF04 {
-                self.divider.read(address)
+                T::promote(self.timer.read_divider())
+            }
+            else if address == 0xFF05 {
+                T::promote(self.timer.read_counter())
+            }
+            else if address == 0xFF06 {
+                T::promote(self.timer.read_modulo())
+            }
+            else if address == 0xFF07 {
+                T::promote(self.timer.read_control())
             }
             else {
                 self.io_registers.read(address)
@@ -274,7 +302,16 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
         else if _address >= IOREGS_START {
             // Some registers have special behaviors
             if address == 0xFF04 {
-                self.divider.write(value, address)
+                self.timer.write_divider(value.demote())
+            }
+            else if address == 0xFF05 {
+                self.timer.write_counter(value.demote())
+            }
+            else if address == 0xFF06 {
+                self.timer.write_modulo(value.demote())
+            }
+            else if address == 0xFF07 {
+                self.timer.write_control(value.demote())
             }
             else {
                 self.io_registers.write(value, address)
@@ -312,10 +349,10 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
 
 impl<'a> MemoryMap<'a> {
     pub fn allocate(cart: Cart) -> MemoryMapData {
-        let divider: Divider = Divider { data: [0x00; 2] };
+        let timer: Timer = Timer::new() ;
         MemoryMapData { 
             cart,
-            divider,
+            timer,
             vram: [0; EXRAM_START - VRAM_START],
             work_ram: [0; WRAM_S_START - WRAM_START],
             work_ram_swappable: [0; ECHORAM_START - WRAM_S_START],
@@ -331,7 +368,7 @@ impl<'a> MemoryMap<'a> {
     pub fn new(data: &mut MemoryMapData) -> MemoryMap {
         MemoryMap { 
             cart: &mut data.cart,
-            divider: &mut data.divider,
+            timer: &mut data.timer,
             vram: SimpleRegion { start: VRAM_START as Address, data: &mut data.vram },
             work_ram: SimpleRegion { start: WRAM_START as Address, data: &mut data.work_ram },
             work_ram_swappable: SimpleRegion { start: WRAM_S_START as Address, data: &mut data.work_ram_swappable },

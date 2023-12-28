@@ -62,6 +62,9 @@ pub enum ConditionCodes {
     NA
 }
 
+const IF_REG_ADDR: Address = 0xFF0F;
+const IE_REG_ADDR: Address = 0xFFFF;
+
 // type MemoryMapRef = Rc<RefCell<MemoryMap>>;
 
 // Trait for reading bytes from various Cpu sources
@@ -430,8 +433,6 @@ impl<'a> Cpu<'a> {
         // and hand back the ISR address of the associated interrupt to jump to
         let isr_location = {
             let mut memory = self.memory.borrow_mut();
-            const IF_REG_ADDR: Address = 0xFF0F;
-            const IE_REG_ADDR: Address = 0xFFFF;
             let reg_if = memory.read::<Byte>(IF_REG_ADDR);
             let reg_ie = memory.read::<Byte>(IE_REG_ADDR);
             let has_serviceable_interrupts = self.ime && ((reg_ie & reg_if) > 0);
@@ -515,11 +516,14 @@ impl<'a> Cpu<'a> {
                 );
             }
             */
+            // Service interrupts and escape the most common HALT case
             if self.service_interrupt() {
                 self.halted = false;
                 self.stopped = false;
+                // Boot processing back to the top, throw out this cycle and restart on the interrupt
                 continue
             }
+            
             if !self.halted && !self.stopped  {
                 // This song and dance needs to be done so that the IME is turned on only after the instruction following EI executes
                 if enable_ime_next_frame {
@@ -557,6 +561,21 @@ impl<'a> Cpu<'a> {
                 if enable_ime_this_frame {
                     self.ime = true;
                     enable_ime_this_frame = false;
+                }
+            }
+            // HALT handling goes here for cases where IME is disabled
+            else {
+                if self.halted && !self.ime {
+                    let mut map = self.memory.borrow_mut();
+                    let reg_if = map.read::<Byte>(IF_REG_ADDR);
+                    if reg_if > 0 {
+                        self.halted = false;
+                        continue
+                    }
+                }
+                // Timer needs to keep ticking while halted, so crank out one M-cycle
+                for _ in 0..4 {
+                    self.tick_timer()
                 }
             } 
         }

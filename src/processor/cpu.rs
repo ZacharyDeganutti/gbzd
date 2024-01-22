@@ -489,95 +489,98 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    pub fn run(&mut self) -> () {
+    pub fn run(&mut self) -> u8 {
+        // TODO: Investigate what to do with these, suspect the fallout cases don't all do 0 cycles
+        const NO_WORK: u8 = 0;
         let mut enable_ime_next_frame = false;
         let mut enable_ime_this_frame = false;
-        loop {
-            // log state
-            /*
-            {
-                let mut mem = self.memory.borrow_mut();
-                let dbg_pc = self.registers.read_word(WordRegisterName::RegPC);
-                println!("A: {} F: {} B: {} C: {} D: {} E: {} H: {} L: {} SP: {} PC: 00:{} ({} {} {} {})",
-                    self.registers.read_byte(ByteRegisterName::RegA).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegF).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegB).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegC).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegD).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegE).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegH).as_hex(),
-                    self.registers.read_byte(ByteRegisterName::RegL).as_hex(),
-                    self.registers.read_word(WordRegisterName::RegSP).as_hex(),
-                    dbg_pc.as_hex(), 
-                    mem.read::<Byte>(dbg_pc).as_hex(),
-                    mem.read::<Byte>(dbg_pc + 1).as_hex(),
-                    mem.read::<Byte>(dbg_pc + 2).as_hex(),
-                    mem.read::<Byte>(dbg_pc + 3).as_hex()
-                );
-            }
-            */
-            // Service interrupts and escape the most common HALT case
-            if self.service_interrupt() {
-                self.halted = false;
-                self.stopped = false;
-                // Boot processing back to the top, throw out this cycle and restart on the interrupt
-                continue
-            }
-            
-            if !self.halted && !self.stopped  {
-                // This song and dance needs to be done so that the IME is turned on only after the instruction following EI executes
-                if enable_ime_next_frame {
-                    enable_ime_next_frame = false;
-                    enable_ime_this_frame = true;
-                }
-                let step_info = self.step();
-                let cost = match step_info {
-                    StepResult::StepSideEffect(cost, effect) => {
-                        match effect {
-                            SideEffect::Halt => {
-                                self.halted = true;
-                            }
-                            SideEffect::Stop => {
-                                self.halted = true;
-                            }
-                            SideEffect::EnableInterrupt => {
-                                self.ime = true
-                            }
-                            SideEffect::EnableInterruptDelayed => {
-                                enable_ime_next_frame = true;
-                            }
-                            SideEffect::DisableInterrupt => {
-                                self.ime = false
-                            }
-                        }
-                        cost
-                    }
-                    StepResult::Step(cost) => cost
-                };
-                // Step timers through the cpu cycles consumed on this iteration
-                for _ in 0..(4*cost) {
-                    self.tick_timer()
-                }
-                if enable_ime_this_frame {
-                    self.ime = true;
-                    enable_ime_this_frame = false;
-                }
-            }
-            // HALT handling goes here for cases where IME is disabled
-            else {
-                if self.halted && !self.ime {
-                    let mut map = self.memory.borrow_mut();
-                    let reg_if = map.read::<Byte>(IF_REG_ADDR);
-                    if reg_if > 0 {
-                        self.halted = false;
-                        continue
-                    }
-                }
-                // Timer needs to keep ticking while halted, so crank out one M-cycle
-                for _ in 0..4 {
-                    self.tick_timer()
-                }
-            } 
+
+        // log state
+        /*
+        {
+            let mut mem = self.memory.borrow_mut();
+            let dbg_pc = self.registers.read_word(WordRegisterName::RegPC);
+            println!("A: {} F: {} B: {} C: {} D: {} E: {} H: {} L: {} SP: {} PC: 00:{} ({} {} {} {})",
+                self.registers.read_byte(ByteRegisterName::RegA).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegF).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegB).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegC).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegD).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegE).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegH).as_hex(),
+                self.registers.read_byte(ByteRegisterName::RegL).as_hex(),
+                self.registers.read_word(WordRegisterName::RegSP).as_hex(),
+                dbg_pc.as_hex(), 
+                mem.read::<Byte>(dbg_pc).as_hex(),
+                mem.read::<Byte>(dbg_pc + 1).as_hex(),
+                mem.read::<Byte>(dbg_pc + 2).as_hex(),
+                mem.read::<Byte>(dbg_pc + 3).as_hex()
+            );
         }
+        */
+        // Service interrupts and escape the most common HALT case
+        if self.service_interrupt() {
+            self.halted = false;
+            self.stopped = false;
+            // Boot processing back to the top, throw out this cycle and restart on the interrupt
+            return NO_WORK
+        }
+        
+        if !self.halted && !self.stopped  {
+            // This song and dance needs to be done so that the IME is turned on only after the instruction following EI executes
+            if enable_ime_next_frame {
+                enable_ime_next_frame = false;
+                enable_ime_this_frame = true;
+            }
+            let step_info = self.step();
+            let cost = match step_info {
+                StepResult::StepSideEffect(cost, effect) => {
+                    match effect {
+                        SideEffect::Halt => {
+                            self.halted = true;
+                        }
+                        SideEffect::Stop => {
+                            self.halted = true;
+                        }
+                        SideEffect::EnableInterrupt => {
+                            self.ime = true
+                        }
+                        SideEffect::EnableInterruptDelayed => {
+                            enable_ime_next_frame = true;
+                        }
+                        SideEffect::DisableInterrupt => {
+                            self.ime = false
+                        }
+                    }
+                    cost
+                }
+                StepResult::Step(cost) => cost
+            };
+            // Step timers through the cpu cycles consumed on this iteration
+            for _ in 0..(4*cost) {
+                self.tick_timer()
+            }
+            if enable_ime_this_frame {
+                self.ime = true;
+                enable_ime_this_frame = false;
+            }
+            return cost
+        }
+        // HALT handling goes here for cases where IME is disabled
+        else {
+            if self.halted && !self.ime {
+                let mut map = self.memory.borrow_mut();
+                let reg_if = map.read::<Byte>(IF_REG_ADDR);
+                if reg_if > 0 {
+                    self.halted = false;
+                    return NO_WORK
+                }
+            }
+            // Timer needs to keep ticking while halted, so crank out one M-cycle
+            for _ in 0..4 {
+                self.tick_timer()
+            }
+            return NO_WORK
+        } 
     }
 }

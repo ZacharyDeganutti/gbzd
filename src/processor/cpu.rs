@@ -386,10 +386,17 @@ pub enum StepResult {
     StepSideEffect(u8, SideEffect),
 }
 
+pub enum InterruptOutcome {
+    Service(Address),
+    NoService
+}
+
 pub struct Cpu<'a> {
     pub registers: RegisterBank,
     pub memory: Rc<RefCell<MemoryMap<'a>>>,
     pub ime: bool,
+    enable_ime_this_frame: bool,
+    enable_ime_next_frame: bool,
     pub halted: bool,
     pub stopped: bool,
     pub cycles_per_second: u32,
@@ -419,6 +426,8 @@ impl<'a> Cpu<'a> {
             registers: regs,
             memory: system_memory,
             ime: false,
+            enable_ime_this_frame: false,
+            enable_ime_next_frame: false,
             halted: false,
             stopped: false,
             cycles_per_second,
@@ -435,45 +444,52 @@ impl<'a> Cpu<'a> {
             let mut memory = self.memory.borrow_mut();
             let reg_if = memory.read::<Byte>(IF_REG_ADDR);
             let reg_ie = memory.read::<Byte>(IE_REG_ADDR);
+            // println!("ime:{}, ie:{}, if:{}", self.ime, reg_ie, reg_if);
             let has_serviceable_interrupts = self.ime && ((reg_ie & reg_if) > 0);
             if has_serviceable_interrupts {
-                //println!("Has serviceable!");
+                // println!("Has serviceable!");
                 const PLACE: u8 = 0x01;
-                let (new_if, isr_location) = if (reg_if & (PLACE << 0)) > 0 {
+                let (new_if, isr_location) = if ((reg_if & reg_ie) & (PLACE << 0)) > 0 {
+                    // println!("Service vblank!");
                     const VBLANK_ISR_LOCATION: Address = 0x0040;
                     (!(PLACE << 0) & reg_if, VBLANK_ISR_LOCATION)
                 }
-                else if (reg_if & (PLACE << 1)) > 0 {
+                else if ((reg_if & reg_ie) & (PLACE << 1)) > 0 {
+                    // println!("Service stat!");
                     const STAT_ISR_LOCATION: Address = 0x0048;
                     (!(PLACE << 1) & reg_if, STAT_ISR_LOCATION)
                 }
-                else if (reg_if & (PLACE << 2)) > 0 {
-                    //println!("Service timer!");
+                else if ((reg_if & reg_ie) & (PLACE << 2)) > 0 {
+                    // println!("Service timer!");
                     const TIMER_ISR_LOCATION: Address = 0x0050;
                     (!(PLACE << 2) & reg_if, TIMER_ISR_LOCATION)
                 }
-                else if (reg_if & (PLACE << 3)) > 0 {
+                else if ((reg_if & reg_ie) & (PLACE << 3)) > 0 {
+                    // println!("Service serial!");
                     const SERIAL_ISR_LOCATION: Address = 0x0058;
                     (!(PLACE << 3) & reg_if, SERIAL_ISR_LOCATION)
                 }
                 else {
+                    // println!("Service joypad!");
                     const JOYPAD_ISR_LOCATION: Address = 0x0060;
                     (!(PLACE << 4) & reg_if, JOYPAD_ISR_LOCATION)
                 };
                 memory.write::<Byte>(new_if, IF_REG_ADDR);
-                Some(isr_location)
-            } else {
-                None
+                InterruptOutcome::Service(isr_location)
+            }
+            else {
+                InterruptOutcome::NoService
             }
         };
         // If an interrupt is to be serviced, toggle off master interrupt enable, push PC, and jump PC to ISR address
+        // There's a fun case where stop/halt should be broken even if IME is disabled
         match isr_location {
-            Some(address) => {
+            InterruptOutcome::Service(address) => {
                 self.ime = false;
                 self.call(address, ConditionCodes::NA);
                 true
             }
-            None => {
+            InterruptOutcome::NoService => {
                 false
             }
         }
@@ -492,8 +508,6 @@ impl<'a> Cpu<'a> {
     pub fn run(&mut self) -> u8 {
         // TODO: Investigate what to do with these, suspect the fallout cases don't all do 0 cycles
         const NO_WORK: u8 = 0;
-        let mut enable_ime_next_frame = false;
-        let mut enable_ime_this_frame = false;
 
         // log state
         /*
@@ -528,9 +542,9 @@ impl<'a> Cpu<'a> {
         
         if !self.halted && !self.stopped  {
             // This song and dance needs to be done so that the IME is turned on only after the instruction following EI executes
-            if enable_ime_next_frame {
-                enable_ime_next_frame = false;
-                enable_ime_this_frame = true;
+            if self.enable_ime_next_frame {
+                self.enable_ime_next_frame = false;
+                self.enable_ime_this_frame = true;
             }
             let step_info = self.step();
             let cost = match step_info {
@@ -546,7 +560,7 @@ impl<'a> Cpu<'a> {
                             self.ime = true
                         }
                         SideEffect::EnableInterruptDelayed => {
-                            enable_ime_next_frame = true;
+                            self.enable_ime_next_frame = true;
                         }
                         SideEffect::DisableInterrupt => {
                             self.ime = false
@@ -560,9 +574,9 @@ impl<'a> Cpu<'a> {
             for _ in 0..(4*cost) {
                 self.tick_timer()
             }
-            if enable_ime_this_frame {
+            if self.enable_ime_this_frame {
                 self.ime = true;
-                enable_ime_this_frame = false;
+                self.enable_ime_this_frame = false;
             }
             return cost
         }
@@ -571,7 +585,8 @@ impl<'a> Cpu<'a> {
             if self.halted && !self.ime {
                 let mut map = self.memory.borrow_mut();
                 let reg_if = map.read::<Byte>(IF_REG_ADDR);
-                if reg_if > 0 {
+                let reg_ie = map.read::<Byte>(IE_REG_ADDR);
+                if (reg_if & reg_ie) > 0 {
                     self.halted = false;
                     return NO_WORK
                 }

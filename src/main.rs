@@ -14,7 +14,7 @@ use crate::processor::cpu::*;
 use crate::ppu::*;
 
 fn main() {
-    let cart = cart::Cart::load_from_file("roms/11-op a,(hl).gb").expect("Problem with ROM file");
+    let cart = cart::Cart::load_from_file("roms/dmg-acid2.gb").expect("Problem with ROM file");
     let mut system_memory_data = memory_gb::MemoryMap::allocate(cart);
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(&mut system_memory_data)));
     let mut cpu = Cpu::new(system_memory.clone());
@@ -25,16 +25,25 @@ fn main() {
     // The ppu pays down the debt (negative)
     // The ppu only has to do work if its debt is greater than 0
     let mut debt: i16 = 0;
+    let mut cpu_locked: bool = false;
     loop {
-        if debt <= 0 {
-            debt += (cpu.run() * 4) as i16;
+        if debt <= 0 && !cpu_locked {
+            let payment = (cpu.run() * 4) as i16;
+            debt += payment;
+            if payment == 0 {
+                cpu_locked = true;
+                // This feels wrong but otherwise the cpu does no work while locked out and the ppu shreds the debt, and the debt is just a simple balancing heuristic.
+                // Likely still a better way to do this
+                debt = 0;
+            }
         }
         else {
             debt -= ppu.run();
+            cpu_locked = false
         }
-        // Run the PPU to catch up with the approximate amount of work that the cpu did
-        //debt -= ppu.run(cpu_cycles);
+        //println!("debt: {}", debt);
     }
+    
     // let mut i = 0;
     // loop {
     //     print!("{}\n", i);

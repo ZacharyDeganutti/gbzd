@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use crate::memory_gb;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
+use crate::memory_gb::ByteExt;
 use crate::memory_gb::MemoryBank;
 use crate::memory_gb::BankType;
 use crate::memory_gb::MemoryUnit;
@@ -31,7 +32,7 @@ struct Tile {
 
 impl Tile {
     pub fn from_address(memory: &mut RefMut<MemoryMap>, address: Address) -> Tile {
-        println!("Tile address {:x}", address);
+        // println!("Tile address {:x}", address);
         let lines: [Word; 8] = core::array::from_fn(|i| memory.read(address + (mem::size_of::<Word>() * i) as Address));
         Tile {
             lines
@@ -47,7 +48,7 @@ impl Tile {
             let low_byte: Byte = (0xFF & data_word) as Byte; 
             let high_byte: Byte = (0xFF & (data_word >> 8)) as Byte;
             // Good chance this is all flipped around
-            let mask: u8 = 1 << idx_x;
+            let mask: u8 = 0x80 >> idx_x;
             Some(Color::from_bits((high_byte & mask) > 0, (low_byte & mask) > 0))
         }
     }
@@ -107,6 +108,10 @@ const DOTS_PER_LINE: u32 = 456;
 const HBLANK_END_DOTS: u32 = DOTS_PER_LINE * (SCREEN_HEIGHT as u32);
 // Number of dots at which VBlank resets
 const DOT_MAX: u32 = HBLANK_END_DOTS + 10;
+// Number of dots taken in an OAM Scan
+const OAM_SCAN_TIME: u32 = 80;
+// Number of dots taken in HBLANK
+const HBLANK_TIME: u32 = 204;
 
 const TILEMAP_WH: u16 = 256;
 
@@ -150,17 +155,20 @@ impl<'a> Ppu<'a> {
             RenderMode::OAMScan => {
                 // Scan the whole OAM in one shot since coroutines aren't 'real' yet
                 // and I really don't want to implement that without those unless I really have to
-                self.oam_scan_results = self.scan_oam();
-                const OAM_SCAN_TIME: u32 = 80;
-                self.current_dot += OAM_SCAN_TIME;
-                OAM_SCAN_TIME as i16
+                if (self.current_dot % DOTS_PER_LINE) == (OAM_SCAN_TIME - 1) {
+                    self.oam_scan_results = self.scan_oam();
+                }
+                
+                const OAM_SCAN_GRANULARITY: u32 = OAM_SCAN_TIME;
+                self.current_dot += OAM_SCAN_GRANULARITY;
+                (OAM_SCAN_GRANULARITY) as i16
             }
             RenderMode::PixelDraw => {
                 // Actually granular timing is for nerds, let's just rip out whole modes at once
                 // This could certainly make things funky within any line,
                 // but SURELY this should be good enough and things will probably mostly shake out
                 let line_number = self.current_dot / 456;
-                println!("{}", line_number);
+                // println!("Line number: {}", line_number);
                 if line_number < SCREEN_HEIGHT as u32 {
                     self.draw_line(line_number);
                 }
@@ -169,9 +177,9 @@ impl<'a> Ppu<'a> {
                 PIXEL_DRAW_TIME as i16
             }
             RenderMode::HBlank => {
-                const HBLANK_TIME: u32 = 204;
-                self.current_dot += HBLANK_TIME;
-                HBLANK_TIME as i16
+                const HBLANK_GRANULARITY: u32 = HBLANK_TIME;
+                self.current_dot += HBLANK_GRANULARITY;
+                HBLANK_GRANULARITY as i16
             }
             RenderMode::VBlank => {
                 self.output_screen();
@@ -207,28 +215,41 @@ impl<'a> Ppu<'a> {
             let printstr: String = stringed_screen.chars().skip(i*SCREEN_WIDTH).take(SCREEN_WIDTH).collect();
             println!("{}", printstr);
         }
-        
-        //println!("{}", stringed_screen);
         println!("----------------");
     } 
 
     // Handles mode changes and updates the render buffer with pixel data at the tail of VBlank
     fn update_render_state(&mut self) {
         let mut memory = self.system_memory.borrow_mut();
+        let mut start_oam_scan = false;
+        let mut start_hblank = false;
         let mut start_vblank = false;
         let mut frame_done = false;
+        let last_mode = self.current_mode;
         self.current_mode = match self.current_mode {
-            RenderMode::OAMScan => RenderMode::PixelDraw,
-            RenderMode::PixelDraw => RenderMode::HBlank,
+            RenderMode::OAMScan => {
+                if (self.current_dot % DOTS_PER_LINE) >= 80 { RenderMode::PixelDraw } else { RenderMode::OAMScan }
+            }
+            RenderMode::PixelDraw => {
+                start_hblank = true;
+                RenderMode::HBlank
+            } 
             RenderMode::HBlank => {
                 // HBlank typically goes back to the next line's OAM scan
                 // The exception is at the end of the 144th line where it goes to VBlank
-                if self.current_dot >= HBLANK_END_DOTS {
-                    start_vblank = true;
-                    RenderMode::VBlank
+                // HBlank is over when a new line is reached
+                if (self.current_dot % DOTS_PER_LINE) == 0 {
+                    if self.current_dot >= HBLANK_END_DOTS {
+                        start_vblank = true;
+                        RenderMode::VBlank
+                    }
+                    else {
+                        start_oam_scan = true;
+                        RenderMode::OAMScan
+                    }
                 }
                 else {
-                    RenderMode::OAMScan
+                    RenderMode::HBlank
                 }
             }
             RenderMode::VBlank => {
@@ -236,6 +257,7 @@ impl<'a> Ppu<'a> {
                 if self.current_dot >= DOT_MAX {
                     frame_done = true;
                     self.current_dot = 0;
+                    start_oam_scan = true;
                     RenderMode::OAMScan
                 }
                 else {
@@ -246,7 +268,7 @@ impl<'a> Ppu<'a> {
 
         // Increment LY whenever a new OAMScan is entered. Set 0 if a frame was just wrapped up
         let old_ly: Byte = memory.read(LY_ADDRESS);
-        let ly = if self.current_mode == RenderMode::OAMScan {
+        let ly = if (self.current_mode == RenderMode::OAMScan) && (last_mode != RenderMode::OAMScan) {
             if frame_done {
                 0
             }
@@ -263,6 +285,7 @@ impl<'a> Ppu<'a> {
         // Probably not enough to be accurate for CPU changes to LYC
         // Might be worth trapping LYC on the CPU to cover both ends
         let lyc: Byte = memory.read(LYC_ADDRESS);
+        //let ly_eq_lc = (if (lyc == ly) && (old_ly != ly) { 1 } else { 0 }) << 2;
         let ly_eq_lc = (if lyc == ly { 1 } else { 0 }) << 2;
         let mode_number = self.current_mode.mode_number();
         let old_stat: Byte = memory.read(STAT_ADDRESS);
@@ -271,9 +294,15 @@ impl<'a> Ppu<'a> {
         
         // Handle possible interrupts arising from VBlank or STAT
         let mut interrupt_flag: Byte = memory.read(IF_REG_ADDR);
-        // TODO: Add all the other stat interrupt sources (mode based ones)
-        // println!("ppu if A: {}", interrupt_flag);
-        interrupt_flag |= 0x2;
+        // Check stat interrupt enables and set the stat interrupt flag if enabled mode changes occur
+        if (start_oam_scan && (stat & (1 << 5)) > 0) 
+            || ((ly_eq_lc > 0) && (stat & (1 << 6)) > 0)
+            || (start_vblank && (stat & (1 << 4)) > 0) 
+            || (start_hblank && (stat & (1 << 3)) > 0) 
+        {
+            interrupt_flag |= 0x2;
+        }
+        
         if start_vblank {
             interrupt_flag |= 0x1;
         }
@@ -309,7 +338,7 @@ impl<'a> Ppu<'a> {
 
             // Check each object (up to max allowable) to see if they exist on this line
             // TODO: verify accuracy
-            if (current_object.y_pos >= ly_padded) && (ly_padded < (current_object.y_pos + object_size)) {
+            if (current_object.y_pos >= ly_padded) && (ly_padded < (current_object.y_pos.wrapping_add(object_size))) {
                 line_objects_buffer.push(current_object);
                 if line_objects_buffer.len() >= MAX_OBJECTS_PER_LINE {
                     break;
@@ -338,47 +367,70 @@ impl<'a> Ppu<'a> {
     fn draw_line(&mut self, line_number: u32) {
         let mut mem = self.system_memory.borrow_mut();
         let lcdc: Byte = mem.read(LCDC_ADDRESS);
-        println!("Draw Line Start");
-        println!("lcdc: {:b}", lcdc);
+        // let lcdc: Byte = 0b1010001;
+        // println!("Draw Line Start");
+        // println!("lcdc: {:b}", lcdc);
         let viewport = Self::viewport_of(mem.read(SCX_ADDRESS), mem.read(SCY_ADDRESS));
         // Background/Window enabled
-        if (lcdc & 0x1) > 0 {
+        if (lcdc & (1 << 0)) > 0 {
             let tile_data_base_address: Address = if (lcdc & (1 << 4)) > 0 {
                 0x8000
             }
             else {
                 0x9000
             };
-            let background_map_base_address: Address = if (lcdc & 0x8) > 0 { 0x9C00 } else { 0x9800 };
+            let window_map_base_address: Address = if (lcdc & (1 << 6)) > 0 { 0x9C00 } else { 0x9800 };
+            let background_map_base_address: Address = if (lcdc & (1 << 3)) > 0 { 0x9C00 } else { 0x9800 };
+            // let background_map_base_address = 0x9800;
+            // TESTING
+            // let ly: Byte = mem.read(LY_ADDRESS);
+            // println!("wx: {}", wx);
+            // println!("WY = LY? {}", wy == ly);
+            // \TESTING
+            
+            // Grab window coordinates for this line
+            let wy: Byte = mem.read(WY_ADDRESS);
+            let wx: Byte = mem.read(WX_ADDRESS);
 
             for pixel in 0..(SCREEN_WIDTH as u16) {
                 let screen_pos_x = (pixel + viewport.0.0) % TILEMAP_WH;
                 let screen_pos_y = (line_number as u16 + viewport.0.1) % TILEMAP_WH;
                 // 32x32 tiles in map, quantize screen position to an 8x8 tile, flatten to linear buffer layout
                 let tile_index = (screen_pos_y/8)*32 + (screen_pos_x/8);
-                print!("{} ", tile_index);
-                let tile_map_address: Address = background_map_base_address + tile_index;
-                // Get address of actual data
-                let tile_data_offset = mem.read::<Byte>(tile_map_address) as Address;
-                // Indexing is wrong, probably mixing up tile map and tile data mentally
+
+                // Grab the background tile map address by default, otherwise grab the window tile map when
+                // The window is enabled, AND
+                // We're inside the window coordinates
+                let mut in_window = false;
+                let map_base_address = if ((lcdc & (1 << 5)) > 0) && (line_number >= wy as u32) && (pixel >= (wx as u16 - 7)) {
+                    in_window = true;
+                    window_map_base_address
+                }
+                else {
+                    background_map_base_address
+                };
+                let tile_map_address: Address = map_base_address + tile_index;
+
                 let tile_data_address = if tile_data_base_address == 0x8000 {
+                    // Get address of actual data
+                    let tile_data_offset = mem.read::<Byte>(tile_map_address) as Address;
                     tile_data_base_address + (tile_data_offset * mem::size_of::<Tile>() as Address)
                 }
                 else {
-                    // index into the higher region in the 0-127 range and lower region in the 128-255 range :(
-                    (tile_data_base_address - (0x800 * (tile_data_offset >> 7)))  + ((tile_data_offset & 0x7F) * mem::size_of::<Tile>() as Address)
+                    let tile_data_offset = mem.read::<Byte>(tile_map_address).interpret_as_signed() as i32;
+                    // print!("tdo: {}, ", (tile_data_offset));
+                    // Impossible to overflow/underflow Address with the TDO value range, so we can just unwrap here
+                    ((tile_data_base_address as i32) + (tile_data_offset * mem::size_of::<Tile>() as i32)).try_into().unwrap()
                 };
                 let tile = Tile::from_address(&mut mem, tile_data_address);
                 let tile_pos_x = (screen_pos_x % 8) as u8;
                 let tile_pos_y = (screen_pos_y % 8) as u8;
                 let color = tile.color(tile_pos_x, tile_pos_y);
+                // print!("color: ({}), addr: {:x} / ", color.unwrap() as u8, tile_data_address);
                 self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap_or(Color::Blank);
-            }
-
-            // Window enable, TODO probably need to move this up somewhere and integrate it with background tiles
-            if (lcdc & (1 << 5)) > 0 {
-                let window_map_address: Address = if (lcdc & (1)) > 0 { 0x9C00 } else { 0x9800 };
-
+                if in_window {
+                    //self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = Color::C;
+                }
             }
         }
         // Objects enabled

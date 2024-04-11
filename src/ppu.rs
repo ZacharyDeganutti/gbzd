@@ -165,15 +165,13 @@ impl<'a> Ppu<'a> {
             RenderMode::OAMScan => {
                 // Scan the whole OAM in one shot since coroutines aren't 'real' yet
                 // and I really don't want to implement that without those unless I really have to
-                //println!("dot {}, OAM_SCAN_TIME - 1 {}", self.current_dot % DOTS_PER_LINE, OAM_SCAN_TIME - 1);
-                //if (self.current_dot % DOTS_PER_LINE) == (OAM_SCAN_TIME - 1) {
-                    self.oam_scan_results = self.scan_oam();
-                    println!("oam_scan_results length {}", self.oam_scan_results.len());
-                //}
+
+                self.oam_scan_results.clear();
+                self.oam_scan_results = self.scan_oam();
+                println!("oam_scan_results length {}", self.oam_scan_results.len());
                 
-                const OAM_SCAN_GRANULARITY: u32 = OAM_SCAN_TIME;
-                self.current_dot += OAM_SCAN_GRANULARITY;
-                (OAM_SCAN_GRANULARITY) as i16
+                self.current_dot += OAM_SCAN_TIME;
+                (OAM_SCAN_TIME) as i16
             }
             RenderMode::PixelDraw => {
                 // Actually granular timing is for nerds, let's just rip out whole modes at once
@@ -339,7 +337,9 @@ impl<'a> Ppu<'a> {
         let ly: Byte = mem.read(LY_ADDRESS);
 
         let objects_are_tall = (lcdc & 0x4) > 0; 
-        let (ly_padded, object_size) = if objects_are_tall { (ly, (2 * TILE_WIDTH)) } else { (ly + TILE_WIDTH, TILE_WIDTH) };
+        // Pad LY because objects exist in a space beginning 16 lines before the screen. Convert LY to that space for easy comparisons
+        let ly_padded = ly + 16;
+        let object_size = if objects_are_tall { 2 * TILE_WIDTH } else { TILE_WIDTH };
 
         for entry_address in (OAM_START..OAM_END).step_by(4) {
             let current_object = OamEntry {
@@ -348,10 +348,8 @@ impl<'a> Ppu<'a> {
                 tile_index: mem.read(entry_address + 2),
                 flags:      mem.read(entry_address + 3)
             };
-
             // Check each object (up to max allowable) to see if they exist on this line
-            // TODO: verify accuracy
-            if (current_object.y_pos >= ly_padded) && (ly_padded < (current_object.y_pos.wrapping_add(object_size))) {
+            if (ly_padded >= current_object.y_pos ) && (ly_padded < (current_object.y_pos + (object_size))) {
                 line_objects_buffer.push(current_object);
                 if line_objects_buffer.len() >= MAX_OBJECTS_PER_LINE {
                     break;
@@ -359,9 +357,8 @@ impl<'a> Ppu<'a> {
             }
         }
         // Object priority in the original gameboy requires a stable sorting of objects by x position
-        line_objects_buffer.sort_by(|a, b| a.x_pos.partial_cmp(&b.x_pos).unwrap());
+        line_objects_buffer.sort_by(|a, b| b.x_pos.partial_cmp(&a.x_pos).unwrap());
         // Order is reversed because we want to draw lower priority pixels first and potentially overwrite them with higher priority ones
-        line_objects_buffer.reverse();
         line_objects_buffer
     }
 
@@ -382,7 +379,7 @@ impl<'a> Ppu<'a> {
         let lcdc: Byte = mem.read(LCDC_ADDRESS);
         // let lcdc: Byte = 0b1010001;
         // println!("Draw Line Start");
-        // println!("lcdc: {:b}", lcdc);
+        println!("lcdc: {:b}", lcdc);
         let viewport = Self::viewport_of(mem.read(SCX_ADDRESS), mem.read(SCY_ADDRESS));
         // Background/Window enabled, so draw them
         if (lcdc & (1 << 0)) > 0 {
@@ -441,7 +438,7 @@ impl<'a> Ppu<'a> {
                 let tile = Tile::from_address(&mut mem, tile_data_address);
                 let color = tile.color(tile_pos_x, tile_pos_y);
                 // print!("color: ({}), addr: {:x} / ", color.unwrap() as u8, tile_data_address);
-                self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap_or(Color::Blank);
+                self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap();
             }
         }
 
@@ -453,13 +450,18 @@ impl<'a> Ppu<'a> {
                 let obj_height = if (lcdc & (1 << 2)) > 0 { 2 * TILE_WIDTH } else { TILE_WIDTH };
                 // Then look if the current object space pixel coordinate is inside the given object
                 if (pix_obj_x >= obj.x_pos) && (pix_obj_x < (obj.x_pos + TILE_WIDTH)) && (pix_obj_line >= obj.y_pos) && (pix_obj_line < (obj.y_pos + obj_height)) {
+                    // println!("HIT: x: {}, y: {}", pix_obj_x, pix_obj_line);
                     ObjectIntersection::Coordinate(pix_obj_x - obj.x_pos, pix_obj_line - obj.y_pos, obj_height)
                 }
                 else {
                     ObjectIntersection::None
                 }
             };
+            for object in &self.oam_scan_results {
+                // println!("x: {}, y: {}", object.x_pos, object.y_pos);
+            }
             for pixel in 0..(SCREEN_WIDTH as u16) {
+                // if line_number == 0 { println!("X pixel: {}", pixel) } ;
                 for object in &self.oam_scan_results {
                     // do a 'fake' shift of the pixel coordinates to account for the leftward 8 pixels of offscreen padding
                     let pixel_shifted = pixel as u8 + TILE_WIDTH;
@@ -483,9 +485,13 @@ impl<'a> Ppu<'a> {
                         let tile = Tile::from_address(&mut mem, tile_data_address);
                         let color = tile.color(flip_adjusted_x, flip_adjusted_y % 8).unwrap();
                         // Blank is transparent, and should allow the background or lower priority objects to shine through
-                        // TODO: background priority check
+                        // No reason to draw blanks
                         if color != Color::Blank {
-                            self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color;
+                            let pixel_index = SCREEN_WIDTH*(line_number as usize) + (pixel as usize);
+                            // But otherwise, we draw it if objects have priority or the background is just a blank pixel
+                            if ((object.flags & (1 << 7)) == 0) || (self.screen_buffer[pixel_index] == Color::Blank) {
+                                self.screen_buffer[pixel_index] = color;
+                            }
                         }
                     }
                 }

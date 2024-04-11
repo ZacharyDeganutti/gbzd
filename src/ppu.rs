@@ -461,8 +461,6 @@ impl<'a> Ppu<'a> {
             };
             for pixel in 0..(SCREEN_WIDTH as u16) {
                 for object in &self.oam_scan_results {
-                    // continue out early if object isn't prioritized
-                    if (object.flags & (1 << 7)) > 0 { continue };
                     // do a 'fake' shift of the pixel coordinates to account for the leftward 8 pixels of offscreen padding
                     let pixel_shifted = pixel as u8 + TILE_WIDTH;
                     // likewise for the line number and upper offscreen padding

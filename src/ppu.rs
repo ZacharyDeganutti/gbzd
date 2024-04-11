@@ -24,6 +24,13 @@ struct OamEntry {
 }
 
 #[derive(Clone, Copy)]
+enum ObjectIntersection {
+    // provides inner x coordinate, inner y coordinate, and object height
+    Coordinate(u8, u8, u8),
+    None
+}
+
+#[derive(Clone, Copy)]
 // A Tile is 8x8 pixels
 struct Tile {
     // Each pixel is 2 bits, 8 pixels per PixelLine
@@ -54,7 +61,7 @@ impl Tile {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Color {
     Blank,
     A,
@@ -113,6 +120,7 @@ const OAM_SCAN_TIME: u32 = 80;
 // Number of dots taken in HBLANK
 const HBLANK_TIME: u32 = 204;
 
+const TILE_WIDTH: u8 = 8;
 const TILEMAP_WH: u16 = 256;
 
 const IF_REG_ADDR: Address = 0xFF0F;
@@ -130,6 +138,7 @@ pub struct Ppu<'a> {
     current_dot: u32,
     screen_buffer: [Color; SCREEN_WIDTH * SCREEN_HEIGHT],
     oam_scan_results: Vec<OamEntry>,
+    internal_window_line_counter: u16,
     system_memory: Rc<RefCell<MemoryMap<'a>>>
 }
 
@@ -142,6 +151,7 @@ impl<'a> Ppu<'a> {
             current_dot: DOT_MAX,
             screen_buffer: [Color::Blank; SCREEN_WIDTH * SCREEN_HEIGHT],
             oam_scan_results: Vec::with_capacity(0),
+            internal_window_line_counter: 0,
             system_memory
         };
         new_ppu
@@ -155,9 +165,11 @@ impl<'a> Ppu<'a> {
             RenderMode::OAMScan => {
                 // Scan the whole OAM in one shot since coroutines aren't 'real' yet
                 // and I really don't want to implement that without those unless I really have to
-                if (self.current_dot % DOTS_PER_LINE) == (OAM_SCAN_TIME - 1) {
+                //println!("dot {}, OAM_SCAN_TIME - 1 {}", self.current_dot % DOTS_PER_LINE, OAM_SCAN_TIME - 1);
+                //if (self.current_dot % DOTS_PER_LINE) == (OAM_SCAN_TIME - 1) {
                     self.oam_scan_results = self.scan_oam();
-                }
+                    println!("oam_scan_results length {}", self.oam_scan_results.len());
+                //}
                 
                 const OAM_SCAN_GRANULARITY: u32 = OAM_SCAN_TIME;
                 self.current_dot += OAM_SCAN_GRANULARITY;
@@ -183,6 +195,7 @@ impl<'a> Ppu<'a> {
             }
             RenderMode::VBlank => {
                 self.output_screen();
+                self.internal_window_line_counter = 0;
                 const VBLANK_TIME: u32 = DOTS_PER_LINE;
                 self.current_dot += VBLANK_TIME;
                 VBLANK_TIME as i16
@@ -326,7 +339,7 @@ impl<'a> Ppu<'a> {
         let ly: Byte = mem.read(LY_ADDRESS);
 
         let objects_are_tall = (lcdc & 0x4) > 0; 
-        let (ly_padded, object_size) = if objects_are_tall { (ly, 16) } else { (ly + 8, 8) };
+        let (ly_padded, object_size) = if objects_are_tall { (ly, (2 * TILE_WIDTH)) } else { (ly + TILE_WIDTH, TILE_WIDTH) };
 
         for entry_address in (OAM_START..OAM_END).step_by(4) {
             let current_object = OamEntry {
@@ -371,7 +384,7 @@ impl<'a> Ppu<'a> {
         // println!("Draw Line Start");
         // println!("lcdc: {:b}", lcdc);
         let viewport = Self::viewport_of(mem.read(SCX_ADDRESS), mem.read(SCY_ADDRESS));
-        // Background/Window enabled
+        // Background/Window enabled, so draw them
         if (lcdc & (1 << 0)) > 0 {
             let tile_data_base_address: Address = if (lcdc & (1 << 4)) > 0 {
                 0x8000
@@ -381,34 +394,37 @@ impl<'a> Ppu<'a> {
             };
             let window_map_base_address: Address = if (lcdc & (1 << 6)) > 0 { 0x9C00 } else { 0x9800 };
             let background_map_base_address: Address = if (lcdc & (1 << 3)) > 0 { 0x9C00 } else { 0x9800 };
-            // let background_map_base_address = 0x9800;
-            // TESTING
-            // let ly: Byte = mem.read(LY_ADDRESS);
-            // println!("wx: {}", wx);
-            // println!("WY = LY? {}", wy == ly);
-            // \TESTING
-            
+
             // Grab window coordinates for this line
             let wy: Byte = mem.read(WY_ADDRESS);
-            let wx: Byte = mem.read(WX_ADDRESS);
+            let wx: Byte = mem.read::<Byte>(WX_ADDRESS).wrapping_sub(7);
 
             for pixel in 0..(SCREEN_WIDTH as u16) {
-                let screen_pos_x = (pixel + viewport.0.0) % TILEMAP_WH;
-                let screen_pos_y = (line_number as u16 + viewport.0.1) % TILEMAP_WH;
-                // 32x32 tiles in map, quantize screen position to an 8x8 tile, flatten to linear buffer layout
-                let tile_index = (screen_pos_y/8)*32 + (screen_pos_x/8);
 
                 // Grab the background tile map address by default, otherwise grab the window tile map when
                 // The window is enabled, AND
                 // We're inside the window coordinates
-                let mut in_window = false;
-                let map_base_address = if ((lcdc & (1 << 5)) > 0) && (line_number >= wy as u32) && (pixel >= (wx as u16 - 7)) {
-                    in_window = true;
-                    window_map_base_address
+                
+                let (in_window, map_base_address) = if ((lcdc & (1 << 5)) > 0) && (line_number >= wy as u32) && (pixel >= (wx as u16)) {
+                    
+                    (true, window_map_base_address)
                 }
                 else {
-                    background_map_base_address
+                    (false, background_map_base_address)
                 };
+
+                let (tile_index, tile_pos_x, tile_pos_y) = if in_window {
+                    let screen_pos_x = (pixel.wrapping_add(viewport.0.0.wrapping_sub(wx as u16))) % TILEMAP_WH;
+                    let screen_pos_y = ((line_number as u16).wrapping_sub(wy as u16)) % TILEMAP_WH;
+                    ((screen_pos_y/8)*32 + (screen_pos_x/8), (screen_pos_x % 8) as u8, (screen_pos_y % 8) as u8)
+                }
+                else {
+                    // 32x32 tiles in map, quantize screen position to an 8x8 tile, flatten to linear buffer layout
+                    let screen_pos_x = (pixel + viewport.0.0) % TILEMAP_WH;
+                    let screen_pos_y = (line_number as u16 + viewport.0.1) % TILEMAP_WH;
+                    ((screen_pos_y/8)*32 + (screen_pos_x/8), (screen_pos_x % 8) as u8, (screen_pos_y % 8) as u8)
+                };
+
                 let tile_map_address: Address = map_base_address + tile_index;
 
                 let tile_data_address = if tile_data_base_address == 0x8000 {
@@ -423,19 +439,59 @@ impl<'a> Ppu<'a> {
                     ((tile_data_base_address as i32) + (tile_data_offset * mem::size_of::<Tile>() as i32)).try_into().unwrap()
                 };
                 let tile = Tile::from_address(&mut mem, tile_data_address);
-                let tile_pos_x = (screen_pos_x % 8) as u8;
-                let tile_pos_y = (screen_pos_y % 8) as u8;
                 let color = tile.color(tile_pos_x, tile_pos_y);
                 // print!("color: ({}), addr: {:x} / ", color.unwrap() as u8, tile_data_address);
                 self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap_or(Color::Blank);
-                if in_window {
-                    //self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = Color::C;
-                }
             }
         }
-        // Objects enabled
-        if (lcdc & 0x2) > 0 {
-            
+
+        // Objects enabled, so draw them 
+        if (lcdc & (1 << 1)) > 0 {
+            // object-pixel intersection test
+            let obj_intersect = |pix_obj_x: u8, pix_obj_line: u8, obj: &OamEntry| -> ObjectIntersection {
+                // First check LCDC to see how tall objects are configured to be
+                let obj_height = if (lcdc & (1 << 2)) > 0 { 2 * TILE_WIDTH } else { TILE_WIDTH };
+                // Then look if the current object space pixel coordinate is inside the given object
+                if (pix_obj_x >= obj.x_pos) && (pix_obj_x < (obj.x_pos + TILE_WIDTH)) && (pix_obj_line >= obj.y_pos) && (pix_obj_line < (obj.y_pos + obj_height)) {
+                    ObjectIntersection::Coordinate(pix_obj_x - obj.x_pos, pix_obj_line - obj.y_pos, obj_height)
+                }
+                else {
+                    ObjectIntersection::None
+                }
+            };
+            for pixel in 0..(SCREEN_WIDTH as u16) {
+                for object in &self.oam_scan_results {
+                    // continue out early if object isn't prioritized
+                    if (object.flags & (1 << 7)) > 0 { continue };
+                    // do a 'fake' shift of the pixel coordinates to account for the leftward 8 pixels of offscreen padding
+                    let pixel_shifted = pixel as u8 + TILE_WIDTH;
+                    // likewise for the line number and upper offscreen padding
+                    let line_number_shifted = line_number as u8 + (2 * TILE_WIDTH);
+
+                    // Overwrite the pixel based on the object's flags if we're inside the object 
+                    if let ObjectIntersection::Coordinate(interior_x, interior_y, obj_height) = obj_intersect(pixel_shifted, line_number_shifted, object) {
+                        let obj_data_base_address: Address = 0x8000;
+                        let flip_adjusted_x = if (object.flags & (1 << 5)) > 0 { (TILE_WIDTH - 1) - interior_x } else { interior_x };
+                        let flip_adjusted_y = if (object.flags & (1 << 6)) > 0 { (obj_height - 1) - interior_y } else { interior_y };
+                        // See OAM byte 2 tile index documentation for details. Behavior is funky for 8x16 objects
+                        let tile_index = if (lcdc & (1 << 2)) > 0 {
+                            if ( flip_adjusted_y / TILE_WIDTH ) == 0 { object.tile_index & 0xFE } else { object.tile_index | 0x1 }
+                        }
+                        else { 
+                            object.tile_index 
+                        };
+                        // Look where object data is stored. Add the tile index for this object. If we are in the lower part of the object, look at the next tile instead
+                        let tile_data_address: Address = obj_data_base_address + (tile_index as Address * mem::size_of::<Tile>() as Address);
+                        let tile = Tile::from_address(&mut mem, tile_data_address);
+                        let color = tile.color(flip_adjusted_x, flip_adjusted_y % 8).unwrap();
+                        // Blank is transparent, and should allow the background or lower priority objects to shine through
+                        // TODO: background priority check
+                        if color != Color::Blank {
+                            self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color;
+                        }
+                    }
+                }
+            }
         }
     }
 }

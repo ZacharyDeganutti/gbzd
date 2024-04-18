@@ -407,7 +407,7 @@ impl<'a> Cpu<'a> {
         let regs = RegisterBank {
             // Initial values set to match test logs
             registers: [
-                0xB0, // F
+                0x08, // F
                 0x01, // A
                 0x13, // C
                 0x00, // B
@@ -432,8 +432,31 @@ impl<'a> Cpu<'a> {
             stopped: false,
             cycles_per_second,
         };
-        // TODO: Clean out after PPU is implemented. Cheat V-blank on 
-        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF44), ByteImmediate::new(0x90));
+        // No bootrom, set initial state of hardware registers to values in DMG column here https://gbdev.io/pandocs/Power_Up_Sequence.html#hardware-registers
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF00), ByteImmediate::new(0xCF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF01), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF02), ByteImmediate::new(0x7E));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF04), ByteImmediate::new(0xAB));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF05), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF06), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF07), ByteImmediate::new(0xF8));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF0F), ByteImmediate::new(0xE1));
+        // TODO: Audio registers omitted for brevity...
+        
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF40), ByteImmediate::new(0x91));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF41), ByteImmediate::new(0x85));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF42), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF43), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF44), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF45), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF46), ByteImmediate::new(0xFF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF47), ByteImmediate::new(0xFC));
+        
+        // OBP0 and OBP1 explicitly uninitialized
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF4A), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF4B), ByteImmediate::new(0x00));
+        // CGB registers uninitialized
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFFFF), ByteImmediate::new(0x00));
         new_cpu
     }
 

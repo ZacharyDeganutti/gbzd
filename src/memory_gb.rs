@@ -241,7 +241,11 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
         }
         else if _address >= IOREGS_START {
             // Some registers have special behaviors
+            // TODO: Implement joypad
             if address == 0xFF04 {
+                T::promote(Byte::invalid_read_value())
+            }
+            else if address == 0xFF04 {
                 T::promote(self.timer.read_divider())
             }
             else if address == 0xFF05 {

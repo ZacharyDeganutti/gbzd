@@ -45,7 +45,7 @@ fn main() {
                 debt -= ppu.run();
             }
         }
-        // println!("debt: {}", debt);
+        //println!("debt: {}", debt);
     }
     
     // let mut i = 0;

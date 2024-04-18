@@ -46,7 +46,7 @@ impl Tile {
         }
     }
 
-    pub fn color(&self, idx_x: u8, idx_y: u8) -> Option<Color> {
+    pub fn color(&self, idx_x: u8, idx_y: u8, palette: Byte) -> Option<Color> {
         if idx_x > 7 || idx_y > 7 {
             None
         }
@@ -56,7 +56,7 @@ impl Tile {
             let high_byte: Byte = (0xFF & (data_word >> 8)) as Byte;
             // Good chance this is all flipped around
             let mask: u8 = 0x80 >> idx_x;
-            Some(Color::from_bits((high_byte & mask) > 0, (low_byte & mask) > 0))
+            Some(Color::from_bits((high_byte & mask) > 0, (low_byte & mask) > 0).apply_palette(palette))
         }
     }
 }
@@ -79,6 +79,16 @@ impl Color {
         }
     }
 
+    pub fn from_value(value: u8) -> Option<Color> {
+        match value {
+            0 => Some(Color::Blank),
+            1 => Some(Color::A),
+            2 => Some(Color::B),
+            3 => Some(Color::C),
+            _ => None
+        }
+    }
+
     pub fn to_value(&self) -> u8 {
         match self {
             Color::Blank => 0,
@@ -86,6 +96,12 @@ impl Color {
             Color::B => 2,
             Color::C => 3
         }
+    }
+
+    pub fn apply_palette(&self, palette: Byte) -> Color {
+        let color_number = self.to_value();
+        let shade = (palette >> (color_number * 2)) & 0x3;
+        Color::from_value(shade).unwrap()
     }
 }
 
@@ -112,13 +128,17 @@ const SCREEN_WIDTH: usize = 160;
 const SCREEN_HEIGHT: usize = 144;
 const DOTS_PER_LINE: u32 = 456;
 // Denotes the start of VBlank
-const HBLANK_END_DOTS: u32 = DOTS_PER_LINE * (SCREEN_HEIGHT as u32);
+const VBLANK_START_DOTS: u32 = DOTS_PER_LINE * (SCREEN_HEIGHT as u32);
 // Number of dots at which VBlank resets
-const DOT_MAX: u32 = HBLANK_END_DOTS + 10;
+const DOT_MAX: u32 = VBLANK_START_DOTS + (10 * DOTS_PER_LINE);
 // Number of dots taken in an OAM Scan
 const OAM_SCAN_TIME: u32 = 80;
-// Number of dots taken in HBLANK
+// Number of dots taken in a pixel draw
+const PIXEL_DRAW_TIME: u32 = 172;
+// Number of dots taken in HBlank
 const HBLANK_TIME: u32 = 204;
+// Denotes the start of HBlank on any given line
+const PIXEL_DRAW_END_DOTS: u32 = OAM_SCAN_TIME + PIXEL_DRAW_TIME;
 
 const TILE_WIDTH: u8 = 8;
 const TILEMAP_WH: u16 = 256;
@@ -130,6 +150,9 @@ const SCY_ADDRESS: Address = 0xFF42;
 const SCX_ADDRESS: Address = 0xFF43;
 const LY_ADDRESS: Address = 0xFF44;
 const LYC_ADDRESS: Address = 0xFF45;
+const BGP_ADDRESS: Address = 0xFF47;
+const OBP0_ADDRESS: Address = 0xFF48;
+const OPB1_ADDRESS: Address = 0xFF49;
 const WY_ADDRESS: Address = 0xFF4A;
 const WX_ADDRESS: Address = 0xFF4B;
 
@@ -158,33 +181,35 @@ impl<'a> Ppu<'a> {
     }
 
     pub fn run(&mut self) -> i16 {
-        // Do some state transitions top level here so it happens after the cpu catches up
-        self.update_render_state();
 
         let dots_spent = match self.current_mode {
             RenderMode::OAMScan => {
                 // Scan the whole OAM in one shot since coroutines aren't 'real' yet
                 // and I really don't want to implement that without those unless I really have to
-
                 self.oam_scan_results.clear();
-                self.oam_scan_results = self.scan_oam();
-                println!("oam_scan_results length {}", self.oam_scan_results.len());
                 
-                self.current_dot += OAM_SCAN_TIME;
-                (OAM_SCAN_TIME) as i16
+                const OAM_DOT_GRANULARITY: u32 = OAM_SCAN_TIME/40;
+                self.current_dot += OAM_DOT_GRANULARITY;
+                if (self.current_dot % DOTS_PER_LINE) >= OAM_SCAN_TIME {
+                    self.oam_scan_results = self.scan_oam();
+                    // println!("oam_scan_results length {}", self.oam_scan_results.len());
+                }
+                (OAM_DOT_GRANULARITY) as i16
             }
             RenderMode::PixelDraw => {
                 // Actually granular timing is for nerds, let's just rip out whole modes at once
                 // This could certainly make things funky within any line,
                 // but SURELY this should be good enough and things will probably mostly shake out
-                let line_number = self.current_dot / 456;
-                // println!("Line number: {}", line_number);
+                const PIXEL_DRAW_GRANULARITY: u32 = PIXEL_DRAW_TIME/4;
+                let line_number = self.current_dot / DOTS_PER_LINE;
+                self.current_dot += PIXEL_DRAW_GRANULARITY;
+                // If we're onscreen and at the end of the pixel drawing mode, write the pixels into the buffer
                 if line_number < SCREEN_HEIGHT as u32 {
-                    self.draw_line(line_number);
+                    if (self.current_dot % DOTS_PER_LINE) >= PIXEL_DRAW_END_DOTS {
+                        self.draw_line(line_number);
+                    }
                 }
-                const PIXEL_DRAW_TIME: u32 = 172;
-                self.current_dot += PIXEL_DRAW_TIME;
-                PIXEL_DRAW_TIME as i16
+                PIXEL_DRAW_GRANULARITY as i16
             }
             RenderMode::HBlank => {
                 const HBLANK_GRANULARITY: u32 = HBLANK_TIME;
@@ -192,13 +217,17 @@ impl<'a> Ppu<'a> {
                 HBLANK_GRANULARITY as i16
             }
             RenderMode::VBlank => {
-                self.output_screen();
-                self.internal_window_line_counter = 0;
+                if self.current_dot == DOT_MAX - DOTS_PER_LINE {
+                    self.output_screen();
+                    self.internal_window_line_counter = 0;
+                }
                 const VBLANK_TIME: u32 = DOTS_PER_LINE;
                 self.current_dot += VBLANK_TIME;
                 VBLANK_TIME as i16
             }
         };
+        // Do some state transitions top level here so it happens after the cpu catches up
+        self.update_render_state();
         dots_spent
     }
 
@@ -232,29 +261,47 @@ impl<'a> Ppu<'a> {
     // Handles mode changes and updates the render buffer with pixel data at the tail of VBlank
     fn update_render_state(&mut self) {
         let mut memory = self.system_memory.borrow_mut();
+        let mut ly_eq_lyc = false;
         let mut start_oam_scan = false;
         let mut start_hblank = false;
         let mut start_vblank = false;
-        let mut frame_done = false;
-        let last_mode = self.current_mode;
+
+        let ly = (self.current_dot / DOTS_PER_LINE) as u8;
+        let lyc: Byte = memory.read(LYC_ADDRESS);
+
+        if (self.current_dot % DOTS_PER_LINE) == 0 {
+            // We have this separate flag to check for a rising edge on this condition
+            ly_eq_lyc = ly == lyc;
+            // println!("ly {}, {}", ly, ly_eq_lyc);
+        }
+
         self.current_mode = match self.current_mode {
             RenderMode::OAMScan => {
-                if (self.current_dot % DOTS_PER_LINE) >= 80 { RenderMode::PixelDraw } else { RenderMode::OAMScan }
+                if (self.current_dot % DOTS_PER_LINE) >= OAM_SCAN_TIME {
+                    RenderMode::PixelDraw 
+                } else { 
+                    RenderMode::OAMScan 
+                }
             }
             RenderMode::PixelDraw => {
-                start_hblank = true;
-                RenderMode::HBlank
+                if (self.current_dot % DOTS_PER_LINE) >= PIXEL_DRAW_END_DOTS {
+                    start_hblank = true;
+                    RenderMode::HBlank
+                }
+                else {
+                    RenderMode::PixelDraw
+                }
             } 
             RenderMode::HBlank => {
-                // HBlank typically goes back to the next line's OAM scan
-                // The exception is at the end of the 144th line where it goes to VBlank
                 // HBlank is over when a new line is reached
                 if (self.current_dot % DOTS_PER_LINE) == 0 {
-                    if self.current_dot >= HBLANK_END_DOTS {
+                    if self.current_dot >= VBLANK_START_DOTS {
+                        // At the end of the 144th line HBlank goes to VBlank
                         start_vblank = true;
                         RenderMode::VBlank
                     }
                     else {
+                        // HBlank typically goes back to the next line's OAM scan
                         start_oam_scan = true;
                         RenderMode::OAMScan
                     }
@@ -265,59 +312,49 @@ impl<'a> Ppu<'a> {
             }
             RenderMode::VBlank => {
                 // VBlank happens for 10 lines, until it hits the reset point
+                //println!("Current dot {}", self.current_dot);
                 if self.current_dot >= DOT_MAX {
-                    frame_done = true;
                     self.current_dot = 0;
                     start_oam_scan = true;
+                    //println!("Go to OAM Scan");
                     RenderMode::OAMScan
                 }
                 else {
+                    //println!("Continued vblank");
                     RenderMode::VBlank
                 }
             }
-        };
-
-        // Increment LY whenever a new OAMScan is entered. Set 0 if a frame was just wrapped up
-        let old_ly: Byte = memory.read(LY_ADDRESS);
-        let ly = if (self.current_mode == RenderMode::OAMScan) && (last_mode != RenderMode::OAMScan) {
-            if frame_done {
-                0
-            }
-            else {
-                old_ly + 1
-            }
-        }
-        else {
-            old_ly
         };
         memory.write(ly, LY_ADDRESS);
 
         // Update the LY=LYC check and mode in the STAT register. 
         // Probably not enough to be accurate for CPU changes to LYC
         // Might be worth trapping LYC on the CPU to cover both ends
-        let lyc: Byte = memory.read(LYC_ADDRESS);
-        //let ly_eq_lc = (if (lyc == ly) && (old_ly != ly) { 1 } else { 0 }) << 2;
-        let ly_eq_lc = (if lyc == ly { 1 } else { 0 }) << 2;
-        let mode_number = self.current_mode.mode_number();
+
+        //println!("ly {}", ly);
+        let ly_eq_lyc_flag = (if lyc == ly { 1 } else { 0 }) << 2;
+        let mode_number_flag = self.current_mode.mode_number();
         let old_stat: Byte = memory.read(STAT_ADDRESS);
-        let stat = (old_stat & !(0x7)) | (ly_eq_lc | mode_number);
+        let stat = (old_stat & !(0x7)) | (ly_eq_lyc_flag | mode_number_flag);
         memory.write(stat, STAT_ADDRESS);
         
         // Handle possible interrupts arising from VBlank or STAT
         let mut interrupt_flag: Byte = memory.read(IF_REG_ADDR);
+        // println!("STAT register: {:b}", stat);
         // Check stat interrupt enables and set the stat interrupt flag if enabled mode changes occur
         if (start_oam_scan && (stat & (1 << 5)) > 0) 
-            || ((ly_eq_lc > 0) && (stat & (1 << 6)) > 0)
+            || (ly_eq_lyc && (stat & (1 << 6)) > 0)
             || (start_vblank && (stat & (1 << 4)) > 0) 
             || (start_hblank && (stat & (1 << 3)) > 0) 
         {
+            // println!("Raising STAT interrupt!");
             interrupt_flag |= 0x2;
         }
         
         if start_vblank {
             interrupt_flag |= 0x1;
         }
-        // println!("ppu if B: {}", interrupt_flag);
+
         memory.write(interrupt_flag, IF_REG_ADDR);
 
     }
@@ -334,9 +371,10 @@ impl<'a> Ppu<'a> {
         let mut mem = self.system_memory.borrow_mut();
 
         let lcdc: Byte = mem.read(LCDC_ADDRESS);
+        // println!("lcdc2: {:b}", lcdc);
         let ly: Byte = mem.read(LY_ADDRESS);
 
-        let objects_are_tall = (lcdc & 0x4) > 0; 
+        let objects_are_tall = (lcdc & (1 << 2)) > 0; 
         // Pad LY because objects exist in a space beginning 16 lines before the screen. Convert LY to that space for easy comparisons
         let ly_padded = ly + 16;
         let object_size = if objects_are_tall { 2 * TILE_WIDTH } else { TILE_WIDTH };
@@ -376,10 +414,13 @@ impl<'a> Ppu<'a> {
 
     fn draw_line(&mut self, line_number: u32) {
         let mut mem = self.system_memory.borrow_mut();
+        let bg_palette: Byte = mem.read(BGP_ADDRESS);
+        let obj_palette_0: Byte = mem.read(OBP0_ADDRESS);
+        let obj_palette_1: Byte = mem.read(OPB1_ADDRESS);
         let lcdc: Byte = mem.read(LCDC_ADDRESS);
         // let lcdc: Byte = 0b1010001;
         // println!("Draw Line Start");
-        println!("lcdc: {:b}", lcdc);
+        // println!("lcdc: {:#08b}", lcdc);
         let viewport = Self::viewport_of(mem.read(SCX_ADDRESS), mem.read(SCY_ADDRESS));
         // Background/Window enabled, so draw them
         if (lcdc & (1 << 0)) > 0 {
@@ -436,7 +477,7 @@ impl<'a> Ppu<'a> {
                     ((tile_data_base_address as i32) + (tile_data_offset * mem::size_of::<Tile>() as i32)).try_into().unwrap()
                 };
                 let tile = Tile::from_address(&mut mem, tile_data_address);
-                let color = tile.color(tile_pos_x, tile_pos_y);
+                let color = tile.color(tile_pos_x, tile_pos_y, bg_palette);
                 // print!("color: ({}), addr: {:x} / ", color.unwrap() as u8, tile_data_address);
                 self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap();
             }
@@ -457,12 +498,16 @@ impl<'a> Ppu<'a> {
                     ObjectIntersection::None
                 }
             };
+            /*
             for object in &self.oam_scan_results {
-                // println!("x: {}, y: {}", object.x_pos, object.y_pos);
+                println!("x: {}, y: {}", object.x_pos, object.y_pos);
             }
+            */
             for pixel in 0..(SCREEN_WIDTH as u16) {
                 // if line_number == 0 { println!("X pixel: {}", pixel) } ;
                 for object in &self.oam_scan_results {
+                    // get the palette that this object is using
+                    let obj_palette = if (object.flags & (1 << 4)) == 0 { obj_palette_0 } else { obj_palette_1 };
                     // do a 'fake' shift of the pixel coordinates to account for the leftward 8 pixels of offscreen padding
                     let pixel_shifted = pixel as u8 + TILE_WIDTH;
                     // likewise for the line number and upper offscreen padding
@@ -483,7 +528,7 @@ impl<'a> Ppu<'a> {
                         // Look where object data is stored. Add the tile index for this object. If we are in the lower part of the object, look at the next tile instead
                         let tile_data_address: Address = obj_data_base_address + (tile_index as Address * mem::size_of::<Tile>() as Address);
                         let tile = Tile::from_address(&mut mem, tile_data_address);
-                        let color = tile.color(flip_adjusted_x, flip_adjusted_y % 8).unwrap();
+                        let color = tile.color(flip_adjusted_x, flip_adjusted_y % 8, obj_palette).unwrap();
                         // Blank is transparent, and should allow the background or lower priority objects to shine through
                         // No reason to draw blanks
                         if color != Color::Blank {

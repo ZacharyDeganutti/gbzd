@@ -395,8 +395,9 @@ impl<'a> Ppu<'a> {
             }
         }
         // Object priority in the original gameboy requires a stable sorting of objects by x position
-        line_objects_buffer.sort_by(|a, b| b.x_pos.partial_cmp(&a.x_pos).unwrap());
+        line_objects_buffer.sort_by(|a, b| a.x_pos.partial_cmp(&b.x_pos).unwrap());
         // Order is reversed because we want to draw lower priority pixels first and potentially overwrite them with higher priority ones
+        line_objects_buffer.reverse();
         line_objects_buffer
     }
 
@@ -437,6 +438,7 @@ impl<'a> Ppu<'a> {
             let wy: Byte = mem.read(WY_ADDRESS);
             let wx: Byte = mem.read::<Byte>(WX_ADDRESS).wrapping_sub(7);
 
+            let mut drew_inside_window: bool = false;
             for pixel in 0..(SCREEN_WIDTH as u16) {
 
                 // Grab the background tile map address by default, otherwise grab the window tile map when
@@ -453,7 +455,10 @@ impl<'a> Ppu<'a> {
 
                 let (tile_index, tile_pos_x, tile_pos_y) = if in_window {
                     let screen_pos_x = (pixel.wrapping_add(viewport.0.0.wrapping_sub(wx as u16))) % TILEMAP_WH;
-                    let screen_pos_y = ((line_number as u16).wrapping_sub(wy as u16)) % TILEMAP_WH;
+                    let screen_pos_yb = ((line_number as u16).wrapping_sub(wy as u16)) % TILEMAP_WH;
+                    // let screen_pos_y = (self.internal_window_line_counter.wrapping_sub(wy as u16)) % TILEMAP_WH;
+                    let screen_pos_y = (self.internal_window_line_counter) % TILEMAP_WH;
+                    drew_inside_window = true;
                     ((screen_pos_y/8)*32 + (screen_pos_x/8), (screen_pos_x % 8) as u8, (screen_pos_y % 8) as u8)
                 }
                 else {
@@ -480,6 +485,9 @@ impl<'a> Ppu<'a> {
                 let color = tile.color(tile_pos_x, tile_pos_y, bg_palette);
                 // print!("color: ({}), addr: {:x} / ", color.unwrap() as u8, tile_data_address);
                 self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap();
+            }
+            if drew_inside_window {
+                self.internal_window_line_counter += 1;
             }
         }
 

@@ -62,7 +62,7 @@ impl Tile {
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
-enum Color {
+pub enum Color {
     Blank,
     A,
     B,
@@ -123,6 +123,7 @@ impl RenderMode {
         }
     }
 }
+const DISPLAY_BUFFER_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 const SCREEN_WIDTH: usize = 160;
 const SCREEN_HEIGHT: usize = 144;
@@ -156,10 +157,14 @@ const OPB1_ADDRESS: Address = 0xFF49;
 const WY_ADDRESS: Address = 0xFF4A;
 const WX_ADDRESS: Address = 0xFF4B;
 
+
 pub struct Ppu<'a> {
     current_mode: RenderMode,
     current_dot: u32,
-    screen_buffer: [Color; SCREEN_WIDTH * SCREEN_HEIGHT],
+    // Double buffer with a back and front
+    display_buffer: [Color; DISPLAY_BUFFER_SIZE * 2],
+    front_buffer_base: usize,
+    back_buffer_base: usize,
     oam_scan_results: Vec<OamEntry>,
     internal_window_line_counter: u16,
     system_memory: Rc<RefCell<MemoryMap<'a>>>
@@ -172,12 +177,18 @@ impl<'a> Ppu<'a> {
         let mut new_ppu = Ppu { 
             current_mode: RenderMode::VBlank,
             current_dot: DOT_MAX,
-            screen_buffer: [Color::Blank; SCREEN_WIDTH * SCREEN_HEIGHT],
+            display_buffer: [Color::Blank; DISPLAY_BUFFER_SIZE * 2],
+            front_buffer_base: 0,
+            back_buffer_base: DISPLAY_BUFFER_SIZE,
             oam_scan_results: Vec::with_capacity(0),
             internal_window_line_counter: 0,
             system_memory
         };
         new_ppu
+    }
+
+    pub fn display_handle(&self) -> &[Color] {
+        &self.display_buffer[self.front_buffer_base .. (DISPLAY_BUFFER_SIZE + self.front_buffer_base)]
     }
 
     pub fn run(&mut self) -> i16 {
@@ -218,6 +229,7 @@ impl<'a> Ppu<'a> {
             }
             RenderMode::VBlank => {
                 if self.current_dot == DOT_MAX - DOTS_PER_LINE {
+                    self.swap_buffers();
                     self.output_screen();
                     self.internal_window_line_counter = 0;
                 }
@@ -237,7 +249,8 @@ impl<'a> Ppu<'a> {
 
     fn debug_print(&self) {
         // Convert the color buffer to a sufficiently pretty string of unicode block values
-        let stringed_screen = self.screen_buffer.iter()
+        //let stringed_screen = self.display_buffer.iter()
+        let stringed_screen = self.display_handle().iter()
         .map(|color| {
             match color {
                 Color::Blank => 0x2588,   // solid shade
@@ -257,6 +270,12 @@ impl<'a> Ppu<'a> {
         }
         println!("----------------");
     } 
+
+    fn swap_buffers(&mut self) {
+        let tmp: usize = self.front_buffer_base;
+        self.front_buffer_base = self.back_buffer_base;
+        self.back_buffer_base = tmp;
+    }
 
     // Handles mode changes and updates the render buffer with pixel data at the tail of VBlank
     fn update_render_state(&mut self) {
@@ -483,8 +502,9 @@ impl<'a> Ppu<'a> {
                 };
                 let tile = Tile::from_address(&mut mem, tile_data_address);
                 let color = tile.color(tile_pos_x, tile_pos_y, bg_palette);
-                // print!("color: ({}), addr: {:x} / ", color.unwrap() as u8, tile_data_address);
-                self.screen_buffer[SCREEN_WIDTH*(line_number as usize) + (pixel as usize)] = color.unwrap();
+                // Always draw to the back buffer
+                let pixel_index = self.back_buffer_base + SCREEN_WIDTH*(line_number as usize) + (pixel as usize);
+                self.display_buffer[pixel_index] = color.unwrap();
             }
             if drew_inside_window {
                 self.internal_window_line_counter += 1;
@@ -540,10 +560,10 @@ impl<'a> Ppu<'a> {
                         // Blank is transparent, and should allow the background or lower priority objects to shine through
                         // No reason to draw blanks
                         if color != Color::Blank {
-                            let pixel_index = SCREEN_WIDTH*(line_number as usize) + (pixel as usize);
+                            let pixel_index = self.back_buffer_base + SCREEN_WIDTH*(line_number as usize) + (pixel as usize);
                             // But otherwise, we draw it if objects have priority or the background is just a blank pixel
-                            if ((object.flags & (1 << 7)) == 0) || (self.screen_buffer[pixel_index] == Color::Blank) {
-                                self.screen_buffer[pixel_index] = color;
+                            if ((object.flags & (1 << 7)) == 0) || (self.display_buffer[pixel_index] == Color::Blank) {
+                                self.display_buffer[pixel_index] = color;
                             }
                         }
                     }

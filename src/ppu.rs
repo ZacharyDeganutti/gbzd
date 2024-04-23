@@ -61,7 +61,7 @@ impl Tile {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Color {
     Blank,
     A,
@@ -167,6 +167,7 @@ pub struct Ppu<'a> {
     back_buffer_base: usize,
     oam_scan_results: Vec<OamEntry>,
     internal_window_line_counter: u16,
+    frame_ready: bool,
     system_memory: Rc<RefCell<MemoryMap<'a>>>
 }
 
@@ -182,13 +183,21 @@ impl<'a> Ppu<'a> {
             back_buffer_base: DISPLAY_BUFFER_SIZE,
             oam_scan_results: Vec::with_capacity(0),
             internal_window_line_counter: 0,
+            frame_ready: false,
             system_memory
         };
         new_ppu
     }
+    
+    pub fn frame_is_ready(&mut self) -> bool {
+        let ready = self.frame_ready;
+        self.frame_ready = false;
+        ready
+    }
 
-    pub fn display_handle(&self) -> &[Color] {
-        &self.display_buffer[self.front_buffer_base .. (DISPLAY_BUFFER_SIZE + self.front_buffer_base)]
+    pub fn display_handle(&self) -> Vec<Color> {
+        // println!("{:?}", &self.display_buffer[self.front_buffer_base .. (DISPLAY_BUFFER_SIZE + self.front_buffer_base)]);
+        (&self.display_buffer[self.front_buffer_base .. (DISPLAY_BUFFER_SIZE + self.front_buffer_base)]).to_vec()
     }
 
     pub fn run(&mut self) -> i16 {
@@ -230,7 +239,7 @@ impl<'a> Ppu<'a> {
             RenderMode::VBlank => {
                 if self.current_dot == DOT_MAX - DOTS_PER_LINE {
                     self.swap_buffers();
-                    self.output_screen();
+                    //self.output_screen();
                     self.internal_window_line_counter = 0;
                 }
                 const VBLANK_TIME: u32 = DOTS_PER_LINE;
@@ -275,6 +284,7 @@ impl<'a> Ppu<'a> {
         let tmp: usize = self.front_buffer_base;
         self.front_buffer_base = self.back_buffer_base;
         self.back_buffer_base = tmp;
+        self.frame_ready = true;
     }
 
     // Handles mode changes and updates the render buffer with pixel data at the tail of VBlank

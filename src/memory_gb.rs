@@ -1,4 +1,4 @@
-use std::mem;
+use std::{mem, ops::Add};
 
 use crate::{cart::Cart, special_registers::Timer};
 
@@ -317,6 +317,9 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             else if address == 0xFF07 {
                 self.timer.write_control(value.demote())
             }
+            else if address == 0xFF46 {
+                self.dma(value.demote())
+            }
             else {
                 self.io_registers.write(value, address)
             }
@@ -382,6 +385,19 @@ impl<'a> MemoryMap<'a> {
             io_registers: SimpleRegion { start: IOREGS_START as Address, data: &mut data.io_registers },
             hram: SimpleRegion { start: HRAM_START as Address, data: &mut data.hram },
             ie: SimpleRegion { start: IE_START as Address, data: &mut data.ie },
+        }
+    }
+
+    // Cheating DMA function that completes instantly instead of in 160 dots
+    fn dma(&mut self, source_upper_byte: Byte) {
+        const DMA_BYTES: Address = 0xA0;
+        let dma_base = (source_upper_byte as Address) << 8;
+        for i in 0..DMA_BYTES {
+            let source = dma_base + i;
+            // Copy to OAM
+            let destination = 0xFE00 + i;
+            let copy_byte: Byte = self.read(source);
+            self.write(copy_byte, destination);
         }
     }
 }

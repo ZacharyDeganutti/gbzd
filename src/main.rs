@@ -56,10 +56,10 @@ fn main() {
                 .into_iter()
                 .map(|color: Color| {
                     match color {
-                        Color::Blank => 0xe0f8d0u32,
-                        Color::A => 0x88c070u32,
-                        Color::B => 0x346856u32,
-                        Color::C => 0x081820u32
+                        Color::A => 0xe0f8d0u32,
+                        Color::B => 0x88c070u32,
+                        Color::C => 0x346856u32,
+                        Color::D => 0x081820u32
                     }
                 })
                 .collect::<Vec<u32>>();

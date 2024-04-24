@@ -46,7 +46,7 @@ impl Tile {
         }
     }
 
-    pub fn color(&self, idx_x: u8, idx_y: u8, palette: Byte) -> Option<Color> {
+    pub fn color_index(&self, idx_x: u8, idx_y: u8) -> Option<ColorIndex> {
         if idx_x > 7 || idx_y > 7 {
             None
         }
@@ -56,45 +56,45 @@ impl Tile {
             let high_byte: Byte = (0xFF & (data_word >> 8)) as Byte;
             // Good chance this is all flipped around
             let mask: u8 = 0x80 >> idx_x;
-            Some(Color::from_bits((high_byte & mask) > 0, (low_byte & mask) > 0).apply_palette(palette))
+            Some(ColorIndex::from_bits((high_byte & mask) > 0, (low_byte & mask) > 0))
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub enum Color {
+pub enum ColorIndex {
     Blank,
-    A,
-    B,
-    C
+    One,
+    Two,
+    Three
 }
 
-impl Color {
-    pub fn from_bits(high: bool, low: bool) -> Color {
+impl ColorIndex {
+    pub fn from_bits(high: bool, low: bool) -> ColorIndex {
         match (high, low) {
-            (false, false) => Color::Blank,
-            (false, true) => Color::A,
-            (true, false) => Color::B,
-            (true, true) => Color::C
+            (false, false) => ColorIndex::Blank,
+            (false, true) => ColorIndex::One,
+            (true, false) => ColorIndex::Two,
+            (true, true) => ColorIndex::Three
         }
     }
 
-    pub fn from_value(value: u8) -> Option<Color> {
+    pub fn from_value(value: u8) -> Option<ColorIndex> {
         match value {
-            0 => Some(Color::Blank),
-            1 => Some(Color::A),
-            2 => Some(Color::B),
-            3 => Some(Color::C),
+            0 => Some(ColorIndex::Blank),
+            1 => Some(ColorIndex::One),
+            2 => Some(ColorIndex::Two),
+            3 => Some(ColorIndex::Three),
             _ => None
         }
     }
 
     pub fn to_value(&self) -> u8 {
         match self {
-            Color::Blank => 0,
-            Color::A => 1,
-            Color::B => 2,
-            Color::C => 3
+            ColorIndex::Blank => 0,
+            ColorIndex::One => 1,
+            ColorIndex::Two => 2,
+            ColorIndex::Three => 3
         }
     }
 
@@ -102,6 +102,49 @@ impl Color {
         let color_number = self.to_value();
         let shade = (palette >> (color_number * 2)) & 0x3;
         Color::from_value(shade).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum Color {
+    A,
+    B,
+    C,
+    D
+}
+
+impl Color {
+    pub fn from_bits(high: bool, low: bool) -> Color {
+        match (high, low) {
+            (false, false) => Color::A,
+            (false, true) => Color::B,
+            (true, false) => Color::C,
+            (true, true) => Color::D
+        }
+    }
+
+    pub fn from_value(value: u8) -> Option<Color> {
+        match value {
+            0 => Some(Color::A),
+            1 => Some(Color::B),
+            2 => Some(Color::C),
+            3 => Some(Color::D),
+            _ => None
+        }
+    }
+
+    pub fn to_value(&self) -> u8 {
+        match self {
+            Color::A => 0,
+            Color::B => 1,
+            Color::C => 2,
+            Color::D => 3
+        }
+    }
+
+    pub fn is_blank_color(&self, palette: Byte) -> bool {
+        let blank_color = palette & 0x3;
+        self.to_value() == blank_color
     }
 }
 
@@ -178,7 +221,7 @@ impl<'a> Ppu<'a> {
         let mut new_ppu = Ppu { 
             current_mode: RenderMode::VBlank,
             current_dot: DOT_MAX,
-            display_buffer: [Color::Blank; DISPLAY_BUFFER_SIZE * 2],
+            display_buffer: [Color::A; DISPLAY_BUFFER_SIZE * 2],
             front_buffer_base: 0,
             back_buffer_base: DISPLAY_BUFFER_SIZE,
             oam_scan_results: Vec::with_capacity(0),
@@ -262,10 +305,10 @@ impl<'a> Ppu<'a> {
         let stringed_screen = self.display_handle().iter()
         .map(|color| {
             match color {
-                Color::Blank => 0x2588,   // solid shade
-                Color::A => 0x2593,     // dark shade
-                Color::B => 0x2592,     // medium shade
-                Color::C => 0x2591,     // light shade
+                Color::A => 0x2588,     // solid shade
+                Color::B => 0x2593,     // dark shade
+                Color::C => 0x2592,     // medium shade
+                Color::D => 0x2591,     // light shade
             }
         })
         .fold(String::with_capacity(SCREEN_HEIGHT*SCREEN_WIDTH), |mut screen_string, next_codepoint| {
@@ -511,10 +554,10 @@ impl<'a> Ppu<'a> {
                     ((tile_data_base_address as i32) + (tile_data_offset * mem::size_of::<Tile>() as i32)).try_into().unwrap()
                 };
                 let tile = Tile::from_address(&mut mem, tile_data_address);
-                let color = tile.color(tile_pos_x, tile_pos_y, bg_palette);
+                let color = tile.color_index(tile_pos_x, tile_pos_y);
                 // Always draw to the back buffer
                 let pixel_index = self.back_buffer_base + SCREEN_WIDTH*(line_number as usize) + (pixel as usize);
-                self.display_buffer[pixel_index] = color.unwrap();
+                self.display_buffer[pixel_index] = color.unwrap().apply_palette(bg_palette);
             }
             if drew_inside_window {
                 self.internal_window_line_counter += 1;
@@ -566,14 +609,14 @@ impl<'a> Ppu<'a> {
                         // Look where object data is stored. Add the tile index for this object. If we are in the lower part of the object, look at the next tile instead
                         let tile_data_address: Address = obj_data_base_address + (tile_index as Address * mem::size_of::<Tile>() as Address);
                         let tile = Tile::from_address(&mut mem, tile_data_address);
-                        let color = tile.color(flip_adjusted_x, flip_adjusted_y % 8, obj_palette).unwrap();
+                        let color_index = tile.color_index(flip_adjusted_x, flip_adjusted_y % 8).unwrap();
                         // Blank is transparent, and should allow the background or lower priority objects to shine through
                         // No reason to draw blanks
-                        if color != Color::Blank {
+                        if color_index != ColorIndex::Blank {
                             let pixel_index = self.back_buffer_base + SCREEN_WIDTH*(line_number as usize) + (pixel as usize);
                             // But otherwise, we draw it if objects have priority or the background is just a blank pixel
-                            if ((object.flags & (1 << 7)) == 0) || (self.display_buffer[pixel_index] == Color::Blank) {
-                                self.display_buffer[pixel_index] = color;
+                            if ((object.flags & (1 << 7)) == 0) || (self.display_buffer[pixel_index].is_blank_color(bg_palette)) {
+                                self.display_buffer[pixel_index] = color_index.apply_palette(obj_palette);
                             }
                         }
                     }

@@ -21,7 +21,7 @@ use crate::ppu::*;
 const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
 
 fn main() {
-    let rom = "roms/wobbly_celebration.gb";
+    let rom = "roms/cpu_instrs.gb";
     // let rom = "roms/11-op a,(hl).gb";
     let cart = cart::Cart::load_from_file(rom).expect("Problem with ROM file");
     let mut system_memory_data = memory_gb::MemoryMap::allocate(cart);

@@ -285,7 +285,7 @@ impl<'a> Cpu<'a> {
     pub fn jr(&mut self, offset: i8, condition: ConditionCodes) -> bool {
         if self.registers.check_condition(condition) {
             let current_address = self.registers.read_word(WordRegisterName::RegPC);
-            let address = current_address.checked_add_signed(offset as i16).unwrap();
+            let address = current_address.wrapping_add_signed(offset as i16);
 
             self.registers.write_word(WordRegisterName::RegPC, address);
             true

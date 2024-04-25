@@ -452,9 +452,6 @@ impl<'a> Cpu<'a> {
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF46), ByteImmediate::new(0xFF));
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF47), ByteImmediate::new(0xFC));
         
-        // OBP0 and OBP1 explicitly uninitialized
-        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF4A), ByteImmediate::new(0x00));
-        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF4B), ByteImmediate::new(0x00));
         // CGB registers uninitialized
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFFFF), ByteImmediate::new(0x00));
         new_cpu
@@ -577,7 +574,7 @@ impl<'a> Cpu<'a> {
                             self.halted = true;
                         }
                         SideEffect::Stop => {
-                            self.halted = true;
+                            self.stopped = true;
                         }
                         SideEffect::EnableInterrupt => {
                             self.ime = true

@@ -305,7 +305,13 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
         }
         else if _address >= IOREGS_START {
             // Some registers have special behaviors
-            if address == 0xFF04 {
+            if address == 0xFF00 {
+                // CPU cannot write bottom nibble of the joypad register, but some things might try.
+                // Overwrite with new top nibble and old bottom nibble
+                let joypad_value = self.io_registers.read::<Byte>(address);
+                self.io_registers.write((value.demote() & 0xF0) | (joypad_value & 0x0F), address)
+            }
+            else if address == 0xFF04 {
                 self.timer.write_divider(value.demote())
             }
             else if address == 0xFF05 {
@@ -366,7 +372,7 @@ impl<'a> MemoryMap<'a> {
             echo_ram: [0; OAM_START - ECHORAM_START],
             oam: [0; UNUSABLE_START - OAM_START],
             unusable: [0; IOREGS_START - UNUSABLE_START],
-            io_registers: [0; HRAM_START - IOREGS_START],
+            io_registers: [0xFF; HRAM_START - IOREGS_START],
             hram: [0; IE_START - HRAM_START],
             ie: [0; 1],
         }

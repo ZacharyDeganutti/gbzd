@@ -11,10 +11,14 @@ mod display;
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 use display::DisplayMiniFB;
 
 use crate::processor::cpu::*;
 use crate::ppu::*;
+
+const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
 
 fn main() {
     let rom = "roms/wobbly_celebration.gb";
@@ -33,6 +37,8 @@ fn main() {
     let mut debt: i16 = 0;
     let mut cpu_locked: bool = false;
     let mut color_buffer = vec![0u32; 160*144];
+    let mut frame_time_start = Instant::now();
+    let mut frame_time_end = Instant::now();
     loop {
         if debt <= 0 && !cpu_locked {
             let payment = (cpu.run() * 4) as i16;
@@ -63,13 +69,17 @@ fn main() {
                     }
                 })
                 .collect::<Vec<u32>>();
-
             // println!("{:x?}", color_buffer);
+            // Clock in the time taken as late as possible for a decent sleep timing
+            frame_time_end = Instant::now();
+            let frame_time_elapsed = frame_time_end - frame_time_start;
+            // println!("frame start {:?}, frame end {:?}, duration {:?}", frame_time_start, frame_time_end, frame_time_elapsed);
+            if frame_time_elapsed < FRAME_TIME_TOTAL {
+                sleep(FRAME_TIME_TOTAL - frame_time_elapsed);
+            }
             display.update(&color_buffer);
+            frame_time_start = Instant::now();
         }
-
-        // println!("yeehaw");
-        // println!("debt: {}", debt);
     }
     
     // let mut i = 0;

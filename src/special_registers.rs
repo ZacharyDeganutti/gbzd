@@ -100,12 +100,13 @@ impl Timer {
     }
 
     fn control_mask(&mut self) -> Word {
-        let mut mask: Word = 0;
-        mask |= ((self.control & 0) as Word) << 9;
-        mask |= ((self.control & 1) as Word) << 3;
-        mask |= ((self.control & 2) as Word) << 5;
-        mask |= ((self.control & 3) as Word) << 7;
-        mask
+        match self.control & 0x3 {
+            0 => 1 << 9,
+            1 => 1 << 3,
+            2 => 1 << 5,
+            3 => 1 << 7,
+            _ => 0          // This shouldn't happen but something sure is going to spin fast if it does!
+        }
     }
 
     pub fn new() -> Timer {

@@ -22,7 +22,6 @@ const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
 
 fn main() {
     let rom = "roms/wobbly_celebration.gb";
-    // let rom = "roms/11-op a,(hl).gb";
     let cart = cart::Cart::load_from_file(rom).expect("Problem with ROM file");
     let mut system_memory_data = memory_gb::MemoryMap::allocate(cart);
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(&mut system_memory_data)));
@@ -71,13 +70,13 @@ fn main() {
                 .collect::<Vec<u32>>();
             // println!("{:x?}", color_buffer);
             // Clock in the time taken as late as possible for a decent sleep timing
+            display.update(&color_buffer);
             frame_time_end = Instant::now();
             let frame_time_elapsed = frame_time_end - frame_time_start;
             // println!("frame start {:?}, frame end {:?}, duration {:?}", frame_time_start, frame_time_end, frame_time_elapsed);
             if frame_time_elapsed < FRAME_TIME_TOTAL {
                 sleep(FRAME_TIME_TOTAL - frame_time_elapsed);
             }
-            display.update(&color_buffer);
             frame_time_start = Instant::now();
         }
     }

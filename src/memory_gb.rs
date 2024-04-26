@@ -149,17 +149,25 @@ pub struct SimpleRegion<'a> {
     pub data: &'a mut [Byte],
 }
 
-// Read from a given buffer at a specific address
+// Read from a given buffer at a specific address within a 16 bit address space
 pub fn read_from_buffer<T: MemoryUnit>(buffer: &[u8], address: Address) -> T {
-    let adjusted_index = address as usize; 
-    let read_slice = &buffer[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+    read_from_buffer_extended(buffer, address as usize)
+}
+
+// Read from some arbitrary buffer without the 16 bit address space limitation. Useful for cartridge mapping
+pub fn read_from_buffer_extended<T: MemoryUnit>(buffer: &[u8], address: usize) -> T {
+    let read_slice = &buffer[address ..(address + mem::size_of::<T>())];
     T::from_le_bytes(read_slice)
 }
 
-// Write a value to a mutable buffer at a specific address
+// Write a value to a mutable buffer at a specific address within a 16 bit address space
 pub fn write_to_buffer<T: MemoryUnit>(buffer: &mut [u8], value: T, address: Address) -> () {
-    let adjusted_index = address as usize;
-    let destination_slice = &mut buffer[adjusted_index..(adjusted_index + mem::size_of::<T>())];
+    write_to_buffer_extended(buffer, value, address as usize)
+}
+
+// Write a value to a mutable buffer at a specific address within a 16 bit address space
+pub fn write_to_buffer_extended<T: MemoryUnit>(buffer: &mut [u8], value: T, address: usize) -> () {
+    let destination_slice = &mut buffer[address..(address + mem::size_of::<T>())];
     value.copy_into_le_bytes(destination_slice)
 }
 

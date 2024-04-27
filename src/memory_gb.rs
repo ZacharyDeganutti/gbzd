@@ -60,7 +60,7 @@ impl MemoryUnit for Byte {
     }
 
     fn from_le_bytes(bytes: &[Byte]) -> Self {
-        Self::from_le_bytes(bytes.try_into().unwrap())
+        bytes[0]
     }
 
     fn invalid_read_value() -> Self {
@@ -97,8 +97,14 @@ impl MemoryUnit for Word {
         destination.copy_from_slice(&bytes)
     }
 
+    #[cfg(target_endian = "big")]
     fn from_le_bytes(bytes: &[Byte]) -> Self {
-        Self::from_le_bytes(bytes.try_into().unwrap())
+        (bytes[0] as Word) << 8 | (bytes[1] as Word)
+    }
+
+    #[cfg(target_endian = "little")]
+    fn from_le_bytes(bytes: &[Byte]) -> Self {
+        (bytes[1] as Word) << 8 | (bytes[0] as Word)
     }
 
     fn invalid_read_value() -> Self {

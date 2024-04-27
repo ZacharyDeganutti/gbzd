@@ -13,29 +13,28 @@ use crate::memory_gb::MemoryUnit;
 impl MemoryRegion for Divider {
     fn read<T: MemoryUnit>(&mut self, _: Address) -> T {
         // The divider internally is 2 bytes, but only the top byte is exposed in the address space
-        T::from_le_bytes(&self.data[1..]) 
+        T::promote((self.data >> 8) as Byte)
     }
 
     // Writing directly to the divider clears it out
     fn write<T: MemoryUnit>(&mut self, _: T, _: Address) -> () {
-        self.data = [0x00, 0x00]
+        self.data = 0x0000
     }
 }
 
 impl Divider {
     pub fn increment(&mut self) -> () {
-        let value = Word::from_le_bytes(self.data);
-        self.data = value.wrapping_add(1).to_le_bytes();
+        self.data = self.data.wrapping_add(1);
     }
 
     pub fn full_read(&mut self) -> Word {
-        Word::from_le_bytes(self.data)
+        Word::from_gb_endian(self.data)
     }
 }
 
 // End cart types
 struct Divider {
-    data: [Byte; 2]
+    data: Word
 }
 
 impl Timer {
@@ -110,7 +109,7 @@ impl Timer {
     }
 
     pub fn new() -> Timer {
-        let divider: Divider = Divider { data: [0x00; 2] };
+        let divider: Divider = Divider { data: 0x0000 };
         Timer {
             overflowing: false,
             divider,

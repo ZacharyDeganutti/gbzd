@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 minifb = "0.25.0"
+windows = "0.56.0"

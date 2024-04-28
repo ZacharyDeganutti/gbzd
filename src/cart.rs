@@ -114,7 +114,7 @@ impl MemoryRegion for MBC3 {
                         memory_gb::read_from_buffer_extended(&self.ram_banks, bank_adjusted_address)
                     }
                     else {
-                        T::promote(0xFF)
+                        T::promote(Byte::invalid_read_value())
                     }
                 }
             }
@@ -181,7 +181,7 @@ impl Cart {
         let contents = std::fs::read(path)?;
         let calc_ram = | bank_count: usize | {
             let mut ram_banks = Vec::<Byte>::with_capacity(bank_count*RAM_BANK_WIDTH);
-            ram_banks.resize_with(ram_banks.capacity(), || 0xFF);
+            ram_banks.resize_with(ram_banks.capacity(), || Byte::invalid_read_value());
             (bank_count, ram_banks)
         };
         let (ram_bank_count, ram_banks) = match contents[RAM_SIZE_LOCATION] {

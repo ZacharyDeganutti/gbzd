@@ -1,6 +1,6 @@
 use std::{mem, ops::Add};
 
-use crate::{cart::Cart, special_registers::Timer};
+use crate::{cart::Cart, input::{self, Joypad}, special_registers::Timer};
 
 pub type Byte = u8;
 pub type Word = u16;
@@ -217,6 +217,7 @@ const IE_START: usize = 0xFFFF;
 pub struct MemoryMapData { 
     cart: Cart,
     timer: Timer,
+    joypad: Joypad,
     vram: [Byte; EXRAM_START - VRAM_START],
     work_ram: [Byte; WRAM_S_START - WRAM_START],
     work_ram_swappable: [Byte; ECHORAM_START - WRAM_S_START],
@@ -231,6 +232,7 @@ pub struct MemoryMapData {
 pub struct MemoryMap<'a> { 
     cart: &'a mut Cart,
     pub timer: &'a mut Timer,
+    pub joypad: &'a mut Joypad,
     vram: SimpleRegion<'a>,
     work_ram: SimpleRegion<'a>,
     work_ram_swappable: SimpleRegion<'a>,
@@ -256,7 +258,10 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
         else if _address >= IOREGS_START {
             // Some registers have special behaviors
             // TODO: Implement joypad
-            if address == 0xFF04 {
+            if address == 0xFF00 {
+                T::promote(self.joypad.read())
+            }
+            else if address == 0xFF04 {
                 T::promote(Byte::invalid_read_value())
             }
             else if address == 0xFF04 {
@@ -320,10 +325,13 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
         else if _address >= IOREGS_START {
             // Some registers have special behaviors
             if address == 0xFF00 {
-                // CPU cannot write bottom nibble of the joypad register, but some things might try.
-                // Overwrite with new top nibble and old bottom nibble
-                let joypad_value = self.io_registers.read::<Byte>(address);
-                self.io_registers.write((value.demote() & 0xF0) | (joypad_value & 0x0F), address)
+                // Check upper nibble of the written byte
+                match value.demote() >> 4 {
+                    0 => self.joypad.set_mode(input::JoypadMode::Unselected),
+                    1 => self.joypad.set_mode(input::JoypadMode::DPad),
+                    2 => self.joypad.set_mode(input::JoypadMode::Buttons),
+                    _ => () // Ignore the write if an invalid combination is supplied
+                }
             }
             else if address == 0xFF04 {
                 self.timer.write_divider(value.demote())
@@ -375,11 +383,12 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
 }
 
 impl<'a> MemoryMap<'a> {
-    pub fn allocate(cart: Cart) -> MemoryMapData {
+    pub fn allocate(cart: Cart, joypad: Joypad) -> MemoryMapData {
         let timer: Timer = Timer::new() ;
         MemoryMapData { 
             cart,
             timer,
+            joypad,
             vram: [0; EXRAM_START - VRAM_START],
             work_ram: [0; WRAM_S_START - WRAM_START],
             work_ram_swappable: [0; ECHORAM_START - WRAM_S_START],
@@ -396,6 +405,7 @@ impl<'a> MemoryMap<'a> {
         MemoryMap { 
             cart: &mut data.cart,
             timer: &mut data.timer,
+            joypad: &mut data.joypad,
             vram: SimpleRegion { start: VRAM_START as Address, data: &mut data.vram },
             work_ram: SimpleRegion { start: WRAM_START as Address, data: &mut data.work_ram },
             work_ram_swappable: SimpleRegion { start: WRAM_S_START as Address, data: &mut data.work_ram_swappable },

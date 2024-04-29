@@ -526,9 +526,7 @@ impl<'a> Ppu<'a> {
                 };
 
                 let (tile_index, tile_pos_x, tile_pos_y) = if in_window {
-                    let screen_pos_x = (pixel.wrapping_add(viewport.0.0.wrapping_sub(wx as u16))) % TILEMAP_WH;
-                    let screen_pos_yb = ((line_number as u16).wrapping_sub(wy as u16)) % TILEMAP_WH;
-                    // let screen_pos_y = (self.internal_window_line_counter.wrapping_sub(wy as u16)) % TILEMAP_WH;
+                    let screen_pos_x = (pixel.wrapping_sub(wx as u16)) % TILEMAP_WH;
                     let screen_pos_y = (self.internal_window_line_counter) % TILEMAP_WH;
                     drew_inside_window = true;
                     ((screen_pos_y/8)*32 + (screen_pos_x/8), (screen_pos_x % 8) as u8, (screen_pos_y % 8) as u8)

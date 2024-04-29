@@ -23,7 +23,7 @@ use crate::input::*;
 const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
 
 fn main() {
-    let rom = "roms/cpu_instrs.gb";
+    let rom = "roms/dmg-acid2.gb";
     let cart = cart::Cart::load_from_file(rom).expect("Problem with ROM file");
     let joypad = input::Joypad::new();
     let mut system_memory_data = memory_gb::MemoryMap::allocate(cart, joypad);

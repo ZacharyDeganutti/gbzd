@@ -262,9 +262,6 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
                 T::promote(self.joypad.read())
             }
             else if address == 0xFF04 {
-                T::promote(Byte::invalid_read_value())
-            }
-            else if address == 0xFF04 {
                 T::promote(self.timer.read_divider())
             }
             else if address == 0xFF05 {

@@ -508,7 +508,7 @@ impl<'a> Ppu<'a> {
 
             // Grab window coordinates for this line
             let wy: Byte = mem.read(WY_ADDRESS);
-            let wx: Byte = mem.read::<Byte>(WX_ADDRESS).wrapping_sub(7);
+            let wx: Byte = mem.read::<Byte>(WX_ADDRESS).saturating_sub(7);
 
             let mut drew_inside_window: bool = false;
             for pixel in 0..(SCREEN_WIDTH as u16) {

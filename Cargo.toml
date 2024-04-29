@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+gilrs = "0.10.7"
 minifb = "0.25.0"
-windows = "0.56.0"

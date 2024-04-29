@@ -23,15 +23,24 @@ use crate::input::*;
 const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
 
 fn main() {
-    let rom = "roms/wobbly_celebration.gb";
+    let rom = "roms/cpu_instrs.gb";
     let cart = cart::Cart::load_from_file(rom).expect("Problem with ROM file");
     let joypad = input::Joypad::new();
     let mut system_memory_data = memory_gb::MemoryMap::allocate(cart, joypad);
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(&mut system_memory_data)));
     let mut cpu = Cpu::new(system_memory.clone());
     let mut ppu = Ppu::new(system_memory.clone());
-    let input_devices: Vec<Box<dyn InputDevice>> = vec![Box::new(DummyDevice{})];
-    let mut input_handler = InputHandler::new(input_devices, system_memory.clone());
+    // let input_devices: Vec<Box<dyn InputDevice>> = vec![Box::new(DummyDevice{})];
+    // TODO: Fix this awful mess
+    
+    let controllers: Vec<Box<dyn InputDevice>> = {
+        let pads = GilControllers::enumerate_gilrs_controllers();
+        let mut intermediate = vec![];
+        intermediate.push(Box::new(pads) as Box<dyn InputDevice>);
+        intermediate
+    };
+    
+    let mut input_handler = InputHandler::new(controllers, system_memory.clone());
     //let mut input_handler = InputH
     let mut display = DisplayMiniFB::new();
 
@@ -90,11 +99,4 @@ fn main() {
             frame_time_start = Instant::now();
         }
     }
-    
-    // let mut i = 0;
-    // loop {
-    //     print!("{}\n", i);
-    //     cpu.step();
-    //     i += 1;
-    // }
 }

@@ -4,8 +4,6 @@ use std::cell::RefCell;
 use crate::memory_gb;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
-use crate::memory_gb::MemoryBank;
-use crate::memory_gb::BankType;
 use crate::memory_gb::MemoryUnit;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
@@ -368,7 +366,6 @@ impl RegisterBank {
 
     pub fn step_pc(&mut self, increment: u16) {
         let pc = self.read_word(WordRegisterName::RegPC);
-        // println!("pc: {:#02x}", pc);
         self.write_word(WordRegisterName::RegPC, pc + increment);
     }
 }
@@ -464,33 +461,26 @@ impl<'a> Cpu<'a> {
             let mut memory = self.memory.borrow_mut();
             let reg_if = memory.read::<Byte>(IF_REG_ADDR);
             let reg_ie = memory.read::<Byte>(IE_REG_ADDR);
-            // println!("ime:{}, ie:{}, if:{}", self.ime, reg_ie, reg_if);
             let has_serviceable_interrupts = self.ime && ((reg_ie & reg_if) > 0);
             if has_serviceable_interrupts {
-                // println!("Has serviceable!");
                 const PLACE: u8 = 0x01;
                 let (new_if, isr_location) = if ((reg_if & reg_ie) & (PLACE << 0)) > 0 {
-                    // println!("Service vblank!");
                     const VBLANK_ISR_LOCATION: Address = 0x0040;
                     (!(PLACE << 0) & reg_if, VBLANK_ISR_LOCATION)
                 }
                 else if ((reg_if & reg_ie) & (PLACE << 1)) > 0 {
-                    // println!("Service stat!");
                     const STAT_ISR_LOCATION: Address = 0x0048;
                     (!(PLACE << 1) & reg_if, STAT_ISR_LOCATION)
                 }
                 else if ((reg_if & reg_ie) & (PLACE << 2)) > 0 {
-                    // println!("Service timer!");
                     const TIMER_ISR_LOCATION: Address = 0x0050;
                     (!(PLACE << 2) & reg_if, TIMER_ISR_LOCATION)
                 }
                 else if ((reg_if & reg_ie) & (PLACE << 3)) > 0 {
-                    // println!("Service serial!");
                     const SERIAL_ISR_LOCATION: Address = 0x0058;
                     (!(PLACE << 3) & reg_if, SERIAL_ISR_LOCATION)
                 }
                 else {
-                    // println!("Service joypad!");
                     const JOYPAD_ISR_LOCATION: Address = 0x0060;
                     (!(PLACE << 4) & reg_if, JOYPAD_ISR_LOCATION)
                 };
@@ -519,14 +509,12 @@ impl<'a> Cpu<'a> {
         let mut mem = self.memory.borrow_mut();
         let fire_interrupt_ready_status = mem.timer.tick();
         if fire_interrupt_ready_status {
-            //println!("Setting IF due to timer overflow! IME: {}", self.ime);
             let if_value: Byte = mem.io_registers.read(0xFF0F);
             mem.io_registers.write(if_value | 0x4, 0xFF0F);
         }
     }
 
     pub fn run(&mut self) -> u8 {
-        // TODO: Investigate what to do with these, suspect the fallout cases don't all do 0 cycles
         const NO_WORK: u8 = 0;
 
         // log state

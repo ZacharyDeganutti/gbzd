@@ -478,7 +478,6 @@ impl<'a> Cpu<'a> {
 
     pub fn bit<T: ReadByte>(&mut self, bit_position: u8, item: T) {
         let value = item.read_byte(self) & (1 << bit_position);
-        // println!("Input {} bit {} is {}", item.read_byte(self), bit_position, value);
         self.registers.set_flag(Flags::Z, value == 0);
         self.registers.set_flag_off(Flags::N);
         self.registers.set_flag_on(Flags::H);

@@ -1,12 +1,7 @@
-use std::mem;
-
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::EndianTranslate;
-use crate::memory_gb::SimpleRegion;
 use crate::memory_gb::Word;
-use crate::memory_gb::MemoryBank;
-use crate::memory_gb::BankType;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryUnit;
 
@@ -93,7 +88,6 @@ impl Timer {
             else {
                 self.counter += 1;
             }
-            //println!("Counter: {}, Control: {}", self.counter.as_hex(), self.control.as_hex());
         }
         fire_interrupt_ready_status
     }

@@ -1,4 +1,4 @@
-use std::{mem, ops::Add};
+use std::mem;
 
 use crate::{cart::Cart, input::{self, Joypad}, special_registers::Timer};
 
@@ -134,17 +134,6 @@ impl MemoryUnit for Word {
     }
 }
 
-pub enum BankType {
-    RawBank,
-    CartBank,
-    DividerBank
-}
-pub struct MemoryBank<'a> {
-    pub start: Address,
-    pub data: &'a mut [Byte],
-    pub variant: BankType
-}
-
 pub trait MemoryRegion {
     fn read<T: MemoryUnit>(&mut self, address: Address) -> T;
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> ();
@@ -179,27 +168,14 @@ pub fn write_to_buffer_extended<T: MemoryUnit>(buffer: &mut [u8], value: T, addr
 
 impl<'a> MemoryRegion for SimpleRegion<'a> {
     fn read<T: MemoryUnit>(&mut self, address: Address) -> T {
-        /*
-        let adjusted_index = (address - self.start) as usize; 
-        let read_slice = &self.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
-        T::from_le_bytes(read_slice);
-        */
         read_from_buffer(&self.data, address - self.start)
     }
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
-        /*
-        let adjusted_index = (address - self.start) as usize;
-        let destination_slice = &mut self.data[adjusted_index..(adjusted_index + mem::size_of::<T>())];
-        value.copy_into_le_bytes(destination_slice)
-        */
         write_to_buffer(self.data, value, address - self.start)
     }
 }
 
 // const MAP_SIZE: usize = 0x10000; 
-
-const ROM_START: usize = 0x0000;
-const ROM_S_START: usize = 0x4000;
 const VRAM_START: usize = 0x8000;
 const EXRAM_START: usize = 0xA000;
 const WRAM_START: usize = 0xC000;
@@ -307,11 +283,6 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
     }
 
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
-        // Hacky debug check that circumvents the usual BankType check, does not represent real functionality
-        if address == 0xFF01 {
-            let a = value.as_ascii();
-            print!("{}", a);
-        }
         let _address = address as usize;
         if _address == IE_START {
             self.ie.write(value, address)
@@ -329,6 +300,11 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
                     2 => self.joypad.set_mode(input::JoypadMode::Buttons),
                     _ => () // Ignore the write if an invalid combination is supplied
                 }
+            }
+            // Redirect serial to printed ascii
+            else if address == 0xFF01 {
+                let a = value.as_ascii();
+                print!("{}", a);
             }
             else if address == 0xFF04 {
                 self.timer.write_divider(value.demote())

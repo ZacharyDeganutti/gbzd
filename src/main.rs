@@ -23,15 +23,17 @@ use crate::input::*;
 const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
 
 fn main() {
-    let rom = "roms/dmg-acid2.gb";
+    let args = std::env::args().collect::<Vec<String>>();
+    if args.len() != 2 {
+        panic!("Incorrect number of arguments supplied. Please provide a path to a ROM file");
+    }
+    let rom = &args[1];
     let cart = cart::Cart::load_from_file(rom).expect("Problem with ROM file");
     let joypad = input::Joypad::new();
     let mut system_memory_data = memory_gb::MemoryMap::allocate(cart, joypad);
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(&mut system_memory_data)));
     let mut cpu = Cpu::new(system_memory.clone());
     let mut ppu = Ppu::new(system_memory.clone());
-    // let input_devices: Vec<Box<dyn InputDevice>> = vec![Box::new(DummyDevice{})];
-    // TODO: Fix this awful mess
     
     let controllers: Vec<Box<dyn InputDevice>> = {
         let pads = GilControllers::enumerate_gilrs_controllers();
@@ -53,6 +55,7 @@ fn main() {
     let mut color_buffer = vec![0u32; 160*144];
     let mut frame_time_start = Instant::now();
     let mut frame_time_end = Instant::now();
+
     loop {
         if debt <= 0 && !cpu_locked {
             let payment = (cpu.run() * 4) as i16;

@@ -106,8 +106,7 @@ impl GilControllers {
 
     // Check if a button is pressed on any of the GilControllers
     fn gil_button_status(&mut self, button: gilrs::ev::Button) -> ButtonState {
-        while let Some(Event { id, event, time }) = self.context.next_event() {
-            // println!("{:?} New event from {}: {:?}", time, id, event);
+        while let Some(Event { .. }) = self.context.next_event() {
         }
         let gamepads = self.context.gamepads();
         let mut pressed = false;
@@ -185,7 +184,7 @@ impl<'a> InputHandler<'a> {
         let mut interrupt_flag: Byte = mem.read(IF_REG_ADDR);
         if ((self.last_button_state ^ sum_of_button_states) & self.last_button_state) > 0
         {
-            interrupt_flag |= (1 << 4);
+            interrupt_flag |= 1 << 4;
         }
         mem.write(interrupt_flag, IF_REG_ADDR);
 

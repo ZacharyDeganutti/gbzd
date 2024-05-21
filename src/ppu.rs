@@ -1,16 +1,11 @@
 use std::cell::RefMut;
 use std::mem;
-use std::ops::Add;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use crate::memory_gb;
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::ByteExt;
-use crate::memory_gb::MemoryBank;
-use crate::memory_gb::BankType;
-use crate::memory_gb::MemoryUnit;
 use crate::memory_gb::Word;
 use crate::memory_gb::MemoryRegion;
 use crate::memory_gb::MemoryMap;
@@ -217,8 +212,7 @@ pub struct Ppu<'a> {
 impl<'a> Ppu<'a> {
     // Creates a PPU initialized to the tail end of VBLANK
     pub fn new(system_memory: Rc<RefCell<MemoryMap>>) -> Ppu {
-        let cycles_per_second = 104826;
-        let mut new_ppu = Ppu { 
+        let new_ppu = Ppu { 
             current_mode: RenderMode::VBlank,
             current_dot: DOT_MAX,
             display_buffer: [Color::A; DISPLAY_BUFFER_SIZE * 2],
@@ -239,12 +233,24 @@ impl<'a> Ppu<'a> {
     }
 
     pub fn display_handle(&self) -> Vec<Color> {
-        // println!("{:?}", &self.display_buffer[self.front_buffer_base .. (DISPLAY_BUFFER_SIZE + self.front_buffer_base)]);
         (&self.display_buffer[self.front_buffer_base .. (DISPLAY_BUFFER_SIZE + self.front_buffer_base)]).to_vec()
     }
 
     pub fn run(&mut self) -> i16 {
-
+        let running = {
+            let mut memory = self.system_memory.borrow_mut();
+            let lcdc: Byte = memory.read(LCDC_ADDRESS);
+            (lcdc & (1 << 7)) > 0
+        };
+        // If the LCD is disabled, refresh all the state and boot back control
+        if !running {
+            self.current_mode = RenderMode::VBlank;
+            self.current_dot = DOT_MAX;
+            self.front_buffer_base = 0;
+            self.frame_ready = false;
+            self.internal_window_line_counter = 0;
+            return 1
+        }
         let dots_spent = match self.current_mode {
             RenderMode::OAMScan => {
                 // Scan the whole OAM in one shot since coroutines aren't 'real' yet
@@ -294,34 +300,6 @@ impl<'a> Ppu<'a> {
         self.update_render_state();
         dots_spent
     }
-
-    fn output_screen(&self) {
-        self.debug_print()
-    }
-
-    fn debug_print(&self) {
-        // Convert the color buffer to a sufficiently pretty string of unicode block values
-        //let stringed_screen = self.display_buffer.iter()
-        let stringed_screen = self.display_handle().iter()
-        .map(|color| {
-            match color {
-                Color::A => 0x2588,     // solid shade
-                Color::B => 0x2593,     // dark shade
-                Color::C => 0x2592,     // medium shade
-                Color::D => 0x2591,     // light shade
-            }
-        })
-        .fold(String::with_capacity(SCREEN_HEIGHT*SCREEN_WIDTH), |mut screen_string, next_codepoint| {
-            screen_string.push(std::char::from_u32(next_codepoint).unwrap());
-            screen_string
-        });
-        
-        for i in 0..SCREEN_HEIGHT {
-            let printstr: String = stringed_screen.chars().skip(i*SCREEN_WIDTH).take(SCREEN_WIDTH).collect();
-            println!("{}", printstr);
-        }
-        println!("----------------");
-    } 
 
     fn swap_buffers(&mut self) {
         let tmp: usize = self.front_buffer_base;
@@ -384,15 +362,12 @@ impl<'a> Ppu<'a> {
             }
             RenderMode::VBlank => {
                 // VBlank happens for 10 lines, until it hits the reset point
-                //println!("Current dot {}", self.current_dot);
                 if self.current_dot >= DOT_MAX {
                     self.current_dot = 0;
                     start_oam_scan = true;
-                    //println!("Go to OAM Scan");
                     RenderMode::OAMScan
                 }
                 else {
-                    //println!("Continued vblank");
                     RenderMode::VBlank
                 }
             }
@@ -412,14 +387,12 @@ impl<'a> Ppu<'a> {
         
         // Handle possible interrupts arising from VBlank or STAT
         let mut interrupt_flag: Byte = memory.read(IF_REG_ADDR);
-        // println!("STAT register: {:b}", stat);
         // Check stat interrupt enables and set the stat interrupt flag if enabled mode changes occur
         if (start_oam_scan && (stat & (1 << 5)) > 0) 
             || (ly_eq_lyc && (stat & (1 << 6)) > 0)
             || (start_vblank && (stat & (1 << 4)) > 0) 
             || (start_hblank && (stat & (1 << 3)) > 0) 
         {
-            // println!("Raising STAT interrupt!");
             interrupt_flag |= 0x2;
         }
         
@@ -443,7 +416,6 @@ impl<'a> Ppu<'a> {
         let mut mem = self.system_memory.borrow_mut();
 
         let lcdc: Byte = mem.read(LCDC_ADDRESS);
-        // println!("lcdc2: {:b}", lcdc);
         let ly: Byte = mem.read(LY_ADDRESS);
 
         let objects_are_tall = (lcdc & (1 << 2)) > 0; 
@@ -491,9 +463,6 @@ impl<'a> Ppu<'a> {
         let obj_palette_0: Byte = mem.read(OBP0_ADDRESS);
         let obj_palette_1: Byte = mem.read(OPB1_ADDRESS);
         let lcdc: Byte = mem.read(LCDC_ADDRESS);
-        // let lcdc: Byte = 0b1010001;
-        // println!("Draw Line Start");
-        // println!("lcdc: {:#08b}", lcdc);
         let viewport = Self::viewport_of(mem.read(SCX_ADDRESS), mem.read(SCY_ADDRESS));
         // Background/Window enabled, so draw them
         if (lcdc & (1 << 0)) > 0 {
@@ -547,7 +516,6 @@ impl<'a> Ppu<'a> {
                 }
                 else {
                     let tile_data_offset = mem.read::<Byte>(tile_map_address).interpret_as_signed() as i32;
-                    // print!("tdo: {}, ", (tile_data_offset));
                     // Impossible to overflow/underflow Address with the TDO value range, so we can just unwrap here
                     ((tile_data_base_address as i32) + (tile_data_offset * mem::size_of::<Tile>() as i32)).try_into().unwrap()
                 };
@@ -577,13 +545,7 @@ impl<'a> Ppu<'a> {
                     ObjectIntersection::None
                 }
             };
-            /*
-            for object in &self.oam_scan_results {
-                println!("x: {}, y: {}", object.x_pos, object.y_pos);
-            }
-            */
             for pixel in 0..(SCREEN_WIDTH as u16) {
-                // if line_number == 0 { println!("X pixel: {}", pixel) } ;
                 for object in &self.oam_scan_results {
                     // get the palette that this object is using
                     let obj_palette = if (object.flags & (1 << 4)) == 0 { obj_palette_0 } else { obj_palette_1 };

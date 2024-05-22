@@ -1,4 +1,6 @@
-use minifb::{Key, ScaleMode, Window, WindowOptions};
+use std::str::FromStr;
+
+use minifb::{Icon, Key, ScaleMode, Window, WindowOptions};
 
 
 pub struct DisplayMiniFB {
@@ -26,6 +28,8 @@ impl DisplayMiniFB {
         
         // window.set_target_fps(60);
         window.limit_update_rate(None);
+
+        window.set_icon(Icon::from_str("images/ziti_icon.ico").unwrap());
 
         DisplayMiniFB {
             width: WIDTH,

@@ -281,7 +281,7 @@ impl<'a> Ppu<'a> {
                 PIXEL_DRAW_GRANULARITY as i16
             }
             RenderMode::HBlank => {
-                const HBLANK_GRANULARITY: u32 = HBLANK_TIME;
+                const HBLANK_GRANULARITY: u32 = HBLANK_TIME/17;
                 self.current_dot += HBLANK_GRANULARITY;
                 HBLANK_GRANULARITY as i16
             }
@@ -291,7 +291,7 @@ impl<'a> Ppu<'a> {
                     //self.output_screen();
                     self.internal_window_line_counter = 0;
                 }
-                const VBLANK_TIME: u32 = DOTS_PER_LINE;
+                const VBLANK_TIME: u32 = DOTS_PER_LINE/19;
                 self.current_dot += VBLANK_TIME;
                 VBLANK_TIME as i16
             }

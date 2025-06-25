@@ -438,8 +438,31 @@ impl<'a> Cpu<'a> {
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF06), ByteImmediate::new(0x00));
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF07), ByteImmediate::new(0xF8));
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF0F), ByteImmediate::new(0xE1));
-        // TODO: Audio registers omitted for brevity...
         
+        // Audio registers
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF10), ByteImmediate::new(0x80));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF11), ByteImmediate::new(0xBF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF12), ByteImmediate::new(0xF3));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF13), ByteImmediate::new(0xFF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF14), ByteImmediate::new(0xBF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF16), ByteImmediate::new(0x3F));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF17), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF18), ByteImmediate::new(0xFF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF19), ByteImmediate::new(0xBF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF1A), ByteImmediate::new(0x7F));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF1B), ByteImmediate::new(0xFF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF1C), ByteImmediate::new(0x9F));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF1D), ByteImmediate::new(0xFF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF1E), ByteImmediate::new(0xBF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF20), ByteImmediate::new(0xFF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF21), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF22), ByteImmediate::new(0x00));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF23), ByteImmediate::new(0xBF));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF24), ByteImmediate::new(0x77));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF25), ByteImmediate::new(0xF3));
+        new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF26), ByteImmediate::new(0xF1));
+        
+        // Video & misc registers
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF40), ByteImmediate::new(0x91));
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF41), ByteImmediate::new(0x85));
         new_cpu.ld_byte(ByteImmediateIndirect::new(0xFF42), ByteImmediate::new(0x00));

@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 gilrs = "0.10.7"
 minifb = "0.25.0"
+sdl3 = { version = "0", features = ["build-from-source"] }

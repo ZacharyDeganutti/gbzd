@@ -3,6 +3,10 @@ mod processor {
     pub mod ops;
     pub mod execute;
 }
+mod audio {
+    pub mod audio;
+    pub mod apu;
+}
 mod memory_gb;
 mod cart;
 mod special_registers;
@@ -14,7 +18,10 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use audio::audio::{AudioPlayer, DutyCycle, SdlAudio, SquareWave};
+use audio::apu::{Apu};
 use display::DisplayMiniFB;
+use sdl3::libc::rand;
 
 use crate::processor::cpu::*;
 use crate::ppu::*;
@@ -34,6 +41,7 @@ fn main() {
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(&mut system_memory_data)));
     let mut cpu = Cpu::new(system_memory.clone());
     let mut ppu = Ppu::new(system_memory.clone());
+    let mut apu = Apu::new(system_memory.clone());
     
     let controllers: Vec<Box<dyn InputDevice>> = {
         let pads = GilControllers::enumerate_gilrs_controllers();
@@ -43,7 +51,50 @@ fn main() {
     };
     
     let mut input_handler = InputHandler::new(controllers, system_memory.clone());
-    //let mut input_handler = InputH
+
+    let sdl_context = sdl3::init().unwrap();
+    let mut audio_player = AudioPlayer::new(SdlAudio::new(&sdl_context));
+
+    let mut wave_440 = SquareWave {
+        duty_cycle: DutyCycle::Half,
+        volume: 0.01,
+        frequency: 440.0,
+        phase: 0.0,
+        sample_rate: 44100.0
+    };
+    let mut wave_1000 = SquareWave {
+        duty_cycle: DutyCycle::Half,
+        volume: 0.01,
+        frequency: 1000.0,
+        phase: 0.0,
+        sample_rate: 44100.0
+    };
+    audio_player.start_channel_1(wave_440);
+    std::thread::sleep(Duration::from_millis(2000));
+    // dummy_audio.stop_channel_1();
+    std::thread::sleep(Duration::from_millis(2000));
+    wave_440.duty_cycle = DutyCycle::Eighth;
+    let audio_toggle_time_start = Instant::now();
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    audio_player.update_channel_1(wave_440);
+    audio_player.update_channel_1(wave_1000);
+    let audio_toggle_time_end = Instant::now();
+    let audio_toggle_time_elapsed = audio_toggle_time_end - audio_toggle_time_start;
+    println!("toggles took {:?}", audio_toggle_time_elapsed);
+
     let mut display = DisplayMiniFB::new();
 
     // Debt represents the timing balance between cpu and ppu.
@@ -57,10 +108,16 @@ fn main() {
     let mut frame_time_end = Instant::now();
 
     loop {
+        if !display.is_open() {
+            std::process::exit(0);
+        }
+
+        let mut dots_elapsed: u16 = 0;
+        // Run CPU or PPU
         if debt <= 0 && !cpu_locked {
-            let payment = (cpu.run() * 4) as i16;
-            debt += payment;
-            if payment == 0 {
+            dots_elapsed = (cpu.run() * 4) as u16;
+            debt += dots_elapsed as i16;
+            if dots_elapsed == 0 {
                 cpu_locked = true;
             }
         }
@@ -70,9 +127,13 @@ fn main() {
                 cpu_locked = false
             }
             else {
-                debt -= ppu.run();
+                dots_elapsed = ppu.run() as u16;
+                debt -= dots_elapsed as i16;
             }
         }
+        // Catchup APU unconditionally
+        let ch_1_wave = apu.update_waves(dots_elapsed);
+        audio_player.update_channel_1(ch_1_wave);
         
         // Things that happen once per frame go here
         if ppu.frame_is_ready() {
@@ -87,7 +148,7 @@ fn main() {
                     }
                 })
                 .collect::<Vec<u32>>();
-            // println!("{:x?}", color_buffer);
+
             display.update(&color_buffer);
             // Poll input for the next frame (first frame will always have default values, but that's fine)
             input_handler.poll();
@@ -100,6 +161,9 @@ fn main() {
                 sleep(FRAME_TIME_TOTAL - frame_time_elapsed);
             }
             frame_time_start = Instant::now();
+            // misc debug logging
+            println!("{:?}", ch_1_wave);
+            //audio_player.update_channel_1(ch_1_wave);
         }
     }
 }

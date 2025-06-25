@@ -41,4 +41,8 @@ impl DisplayMiniFB {
     pub fn update(&mut self, color_buffer: &Vec<u32>) {
         self.window.update_with_buffer(color_buffer, self.width, self.height).unwrap();
     }
+
+    pub fn is_open(&self) -> bool {
+        self.window.is_open()
+    }
 }

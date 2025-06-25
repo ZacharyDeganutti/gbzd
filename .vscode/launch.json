@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["roms/yellow_patched.gb"],
             "cwd": "${workspaceFolder}"
         },
         {

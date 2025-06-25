@@ -34,10 +34,13 @@ impl<'a> Apu<'a> {
     }
 
     fn catchup_registers(&mut self, dots_elapsed: u16) {
-
+        const LENGTH_TIMER_EXPIRY: u8 = 64;
         let mut map = self.memory.borrow_mut();
+
+        const LENGTH_AND_DUTY_CYCLE_ADDRESS: Address = 0xFF11;
+
         // handle trigger events
-        const BIT_7_MASK: u8 = 0x40;
+        const BIT_7_MASK: u8 = (1 << 7);
 
         // channel 1 trigger
         const NR14_ADDR: Address = 0xFF14;
@@ -57,12 +60,16 @@ impl<'a> Apu<'a> {
             let nr13_contents = map.read::<Byte>(NR13_ADDR);
             let period = (nr13_contents as Word) | ((nr14_contents as Word & 0b111) << 8);
             self.channel_1_frequency_current = 131072.0 / (2048.0 - period as f32);
-            // Calculate change in phase
-            let elapsed_time = DOT_DURATION * dots_elapsed as f32;
-            let phase_shift = elapsed_time * self.channel_1_frequency_current;
-            self.channel_1_phase_current = (phase_shift + self.channel_1_frequency_current) % 1.0;
+            // Reset the length counter
+            let length_and_duty_cycle = map.read::<Byte>(LENGTH_AND_DUTY_CYCLE_ADDRESS);
+            if self.channel_1_length_timer_current >= LENGTH_TIMER_EXPIRY {
+                self.channel_1_length_timer_current = length_and_duty_cycle & 0x3F;
+            }
         }
-        
+        // Calculate change in phase
+        let elapsed_time = DOT_DURATION * dots_elapsed as f32;
+        let phase_shift = elapsed_time * self.channel_1_frequency_current;
+        self.channel_1_phase_current = (phase_shift + self.channel_1_frequency_current) % 1.0;
 
         // do timed events
         for _ in 0..dots_elapsed {
@@ -70,6 +77,10 @@ impl<'a> Apu<'a> {
 
             if (self.current_timing_dot % DOTS_PER_LENGTH_TICK) == 0 {
                 // adjust length
+                let length_timer_enabled = (nr14_contents & (1 << 6)) > 0;
+                if length_timer_enabled && self.channel_1_length_timer_current < LENGTH_TIMER_EXPIRY {
+                    self.channel_1_length_timer_current += 1;
+                }
             }
 
             if (self.current_timing_dot % DOTS_PER_SWEEP_TICK) == 0 {
@@ -105,7 +116,8 @@ impl<'a> Apu<'a> {
         let phase = self.channel_1_phase_current;
 
         const VOLUME_CAP: f32 = 0.05;
-        let volume: f32 = VOLUME_CAP * if (length_and_duty_cycle & 0x3F) == 0x3F {
+        // let volume: f32 = VOLUME_CAP * if (length_and_duty_cycle & 0x3F) == 0x3F {
+        let volume: f32 = VOLUME_CAP * if self.channel_1_length_timer_current == 64 {
             0.0
         } 
         else {

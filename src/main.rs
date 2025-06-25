@@ -162,7 +162,7 @@ fn main() {
             }
             frame_time_start = Instant::now();
             // misc debug logging
-            println!("{:?}", ch_1_wave);
+            // println!("{:?}", ch_1_wave);
             //audio_player.update_channel_1(ch_1_wave);
         }
     }

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use minifb::{Icon, Key, ScaleMode, Window, WindowOptions};
+use minifb::{Icon, ScaleMode, Window, WindowOptions};
 
 
 pub struct DisplayMiniFB {

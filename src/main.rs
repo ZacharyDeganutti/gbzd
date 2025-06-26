@@ -21,7 +21,6 @@ use std::time::{Duration, Instant};
 use audio::audio::{AudioPlayer, DutyCycle, SdlAudio, SquareWave};
 use audio::apu::{Apu};
 use display::DisplayMiniFB;
-use sdl3::libc::rand;
 
 use crate::processor::cpu::*;
 use crate::ppu::*;
@@ -66,30 +65,7 @@ fn main() {
         frequency: 1000.0,
     };
     audio_player.start_channel_1(wave_440);
-    std::thread::sleep(Duration::from_millis(2000));
-    // dummy_audio.stop_channel_1();
-    std::thread::sleep(Duration::from_millis(2000));
-    wave_440.duty_cycle = DutyCycle::Eighth;
-    let audio_toggle_time_start = Instant::now();
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    audio_player.update_channel_1(wave_440);
-    audio_player.update_channel_1(wave_1000);
-    let audio_toggle_time_end = Instant::now();
-    let audio_toggle_time_elapsed = audio_toggle_time_end - audio_toggle_time_start;
-    println!("toggles took {:?}", audio_toggle_time_elapsed);
+    audio_player.start_channel_2(wave_440);
 
     let mut display = DisplayMiniFB::new();
 
@@ -128,8 +104,9 @@ fn main() {
             }
         }
         // Catchup APU unconditionally
-        let ch_1_wave = apu.update_waves(dots_elapsed);
+        let (ch_1_wave, ch_2_wave) = apu.update_waves(dots_elapsed);
         audio_player.update_channel_1(ch_1_wave);
+        audio_player.update_channel_2(ch_2_wave);
         
         // Things that happen once per frame go here
         if ppu.frame_is_ready() {

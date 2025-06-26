@@ -22,6 +22,9 @@ pub trait ServeAudio {
     fn start_channel_1(&mut self, wave: SquareWave);
     fn update_channel_1(&mut self, wave: SquareWave);
     fn stop_channel_1(&self);
+    fn start_channel_2(&mut self, wave: SquareWave);
+    fn update_channel_2(&mut self, wave: SquareWave);
+    fn stop_channel_2(&self);
 }
 
 pub struct AudioPlayer<T: ServeAudio> {
@@ -43,6 +46,18 @@ impl<T: ServeAudio> AudioPlayer<T> {
 
     pub fn stop_channel_1(&mut self) {
         self.audio_service.stop_channel_1();
+    }
+
+    pub fn start_channel_2(&mut self, wave: SquareWave) {
+        self.audio_service.start_channel_2(wave);
+    }
+
+    pub fn update_channel_2(&mut self, wave: SquareWave) {
+        self.audio_service.update_channel_2(wave);
+    }
+
+    pub fn stop_channel_2(&mut self) {
+        self.audio_service.stop_channel_2();
     }
 }
 
@@ -92,7 +107,9 @@ pub struct SdlAudio {
     spec: sdl3::audio::AudioSpec,
     playback_device: sdl3::audio::AudioDevice,
     channel_1_outbox: Sender<SquareWave>,
-    channel_1: sdl3::audio::AudioStreamWithCallback<SquareGenerator>
+    channel_1: sdl3::audio::AudioStreamWithCallback<SquareGenerator>,
+    channel_2_outbox: Sender<SquareWave>,
+    channel_2: sdl3::audio::AudioStreamWithCallback<SquareGenerator>
 }
 
 impl ServeAudio for SdlAudio {
@@ -108,6 +125,20 @@ impl ServeAudio for SdlAudio {
 
     fn stop_channel_1(&self) {
         self.channel_1.pause().unwrap();
+    }
+
+    fn start_channel_2(&mut self, wave: SquareWave) {
+        self.channel_2_outbox.send(wave).unwrap();
+        //self.audio_subsystem.open_playback_stream_with_callback(&self.playback_device, &self.spec, wave).unwrap();
+        self.channel_2.resume().unwrap();
+    }
+
+    fn update_channel_2(&mut self, wave: SquareWave) {
+        self.channel_2_outbox.send(wave).unwrap();
+    }
+
+    fn stop_channel_2(&self) {
+        self.channel_2.pause().unwrap();
     }
 }
 
@@ -126,21 +157,32 @@ impl SdlAudio {
             frequency: 440.0,
         };
 
-        let (wave_outbox, wave_inbox) = channel();
+        let (wave_1_outbox, wave_1_inbox) = channel();
         let channel_1_wave_generator = SquareGenerator {
             wave: default_wave,
-            wave_inbox,
+            wave_inbox: wave_1_inbox,
             phase: 0.0,
             sample_rate: 44100.0,
         };
         let channel_1_stream = audio_subsystem.open_playback_stream_with_callback(&playback_device, &spec, channel_1_wave_generator).unwrap();
 
+        let (wave_2_outbox, wave_2_inbox) = channel();
+        let channel_2_wave_generator = SquareGenerator {
+            wave: default_wave,
+            wave_inbox: wave_2_inbox,
+            phase: 0.0,
+            sample_rate: 44100.0,
+        };
+        let channel_2_stream = audio_subsystem.open_playback_stream_with_callback(&playback_device, &spec, channel_2_wave_generator).unwrap();
+
         SdlAudio { 
             audio_subsystem,
             spec,
             playback_device,
-            channel_1_outbox: wave_outbox,
-            channel_1: channel_1_stream
+            channel_1_outbox: wave_1_outbox,
+            channel_1: channel_1_stream,
+            channel_2_outbox: wave_2_outbox,
+            channel_2: channel_2_stream,
         }
     }
 }

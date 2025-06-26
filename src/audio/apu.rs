@@ -17,7 +17,6 @@ pub struct Apu<'a> {
     channel_1_length_timer_current: u8,
     channel_1_envelope_timer_current: u8,
     channel_1_frequency_current: f32,
-    channel_1_phase_current: f32,
 }
 
 impl<'a> Apu<'a> {
@@ -29,7 +28,6 @@ impl<'a> Apu<'a> {
             channel_1_length_timer_current: 0,
             channel_1_envelope_timer_current: 0,
             channel_1_frequency_current: 0.0,
-            channel_1_phase_current: 0.0
         }
     }
 
@@ -40,7 +38,7 @@ impl<'a> Apu<'a> {
         const LENGTH_AND_DUTY_CYCLE_ADDRESS: Address = 0xFF11;
 
         // handle trigger events
-        const BIT_7_MASK: u8 = (1 << 7);
+        const BIT_7_MASK: u8 = 1 << 7;
 
         // channel 1 trigger
         const NR14_ADDR: Address = 0xFF14;
@@ -66,10 +64,6 @@ impl<'a> Apu<'a> {
                 self.channel_1_length_timer_current = length_and_duty_cycle & 0x3F;
             }
         }
-        // Calculate change in phase
-        let elapsed_time = DOT_DURATION * dots_elapsed as f32;
-        let phase_shift = elapsed_time * self.channel_1_frequency_current;
-        self.channel_1_phase_current = (phase_shift + self.channel_1_frequency_current) % 1.0;
 
         // do timed events
         for _ in 0..dots_elapsed {
@@ -113,8 +107,6 @@ impl<'a> Apu<'a> {
 
         let frequency = self.channel_1_frequency_current;
 
-        let phase = self.channel_1_phase_current;
-
         const VOLUME_CAP: f32 = 0.05;
         // let volume: f32 = VOLUME_CAP * if (length_and_duty_cycle & 0x3F) == 0x3F {
         let volume: f32 = VOLUME_CAP * if self.channel_1_length_timer_current == 64 {
@@ -128,9 +120,7 @@ impl<'a> Apu<'a> {
         SquareWave {
             duty_cycle,
             volume,
-            phase,
             frequency,
-            sample_rate: 44100.0
         }
     }
 

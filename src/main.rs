@@ -59,15 +59,11 @@ fn main() {
         duty_cycle: DutyCycle::Half,
         volume: 0.01,
         frequency: 440.0,
-        phase: 0.0,
-        sample_rate: 44100.0
     };
     let mut wave_1000 = SquareWave {
         duty_cycle: DutyCycle::Half,
         volume: 0.01,
         frequency: 1000.0,
-        phase: 0.0,
-        sample_rate: 44100.0
     };
     audio_player.start_channel_1(wave_440);
     std::thread::sleep(Duration::from_millis(2000));

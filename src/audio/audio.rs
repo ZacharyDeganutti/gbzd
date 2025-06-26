@@ -16,10 +16,6 @@ pub struct SquareWave {
     pub volume: f32,
     // in hz
     pub frequency: f32,
-    // 'position' in waveform
-    pub phase: f32,
-    // the rate at which the audio player samples this wave (in hz)
-    pub sample_rate: f32
 }
 
 pub trait ServeAudio {
@@ -54,6 +50,8 @@ impl<T: ServeAudio> AudioPlayer<T> {
 pub struct SquareGenerator {
     wave_inbox: Receiver<SquareWave>,
     wave: SquareWave,
+    phase: f32,
+    sample_rate: f32
 }
 
 impl sdl3::audio::AudioCallback<f32> for SquareGenerator {
@@ -77,36 +75,13 @@ impl sdl3::audio::AudioCallback<f32> for SquareGenerator {
         };
 
         for sample in out.iter_mut() {
-            *sample = if self.wave.phase <= hi_cutoff {
+            *sample = if self.phase <= hi_cutoff {
                 self.wave.volume
             } 
             else {
                 -self.wave.volume
             };
-            let phase_inc = self.wave.frequency / self.wave.sample_rate;
-            self.wave.phase = (self.wave.phase + phase_inc) % 1.0;
-        }
-    }
-}
-
-impl sdl3::audio::AudioCallback<f32> for SquareWave {
-    
-    fn callback(&mut self, out: &mut [f32]) {
-        let hi_cutoff = match self.duty_cycle {
-            DutyCycle::Eighth => 0.825,
-            DutyCycle::Quarter => 0.75,
-            DutyCycle::Half => 0.5,
-            DutyCycle::ThreeQuarter => 0.175
-        };
-
-        for sample in out.iter_mut() {
-            *sample = if self.phase <= hi_cutoff {
-                self.volume
-            } 
-            else {
-                -self.volume
-            };
-            let phase_inc = self.frequency / self.sample_rate;
+            let phase_inc = self.wave.frequency / self.sample_rate;
             self.phase = (self.phase + phase_inc) % 1.0;
         }
     }
@@ -149,14 +124,14 @@ impl SdlAudio {
             duty_cycle: DutyCycle::Quarter,
             volume: 0.03,
             frequency: 440.0,
-            phase: 0.0,
-            sample_rate: 44100.0,
         };
 
         let (wave_outbox, wave_inbox) = channel();
         let channel_1_wave_generator = SquareGenerator {
             wave: default_wave,
-            wave_inbox
+            wave_inbox,
+            phase: 0.0,
+            sample_rate: 44100.0,
         };
         let channel_1_stream = audio_subsystem.open_playback_stream_with_callback(&playback_device, &spec, channel_1_wave_generator).unwrap();
 

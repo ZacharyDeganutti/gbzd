@@ -17,10 +17,12 @@ pub struct Apu<'a> {
     channel_1_length_timer_current: u8,
     channel_1_sweep_pace_current: u8,
     channel_1_period_current: u32,
+    channel_1_active: bool,
     channel_2_volume_current: u8,
     channel_2_length_timer_current: u8,
     channel_2_sweep_pace_current: u8,
     channel_2_period_current: u32,
+    channel_2_active: bool,
 }
 
 impl<'a> Apu<'a> {
@@ -32,10 +34,12 @@ impl<'a> Apu<'a> {
             channel_1_length_timer_current: 0,
             channel_1_sweep_pace_current: 0,
             channel_1_period_current: 0,
+            channel_1_active: false,
             channel_2_volume_current: 0,
             channel_2_length_timer_current: 0,
             channel_2_sweep_pace_current: 0,
             channel_2_period_current: 0,
+            channel_2_active: false,
         }
     }
 
@@ -43,9 +47,19 @@ impl<'a> Apu<'a> {
         const LENGTH_TIMER_EXPIRY: u8 = 64;
         let mut map = self.memory.borrow_mut();
 
-        // handle trigger events
         const BIT_7_MASK: u8 = 1 << 7;
 
+        // handle global stuff
+        const NR52_ADDR: Address = 0xFF26;
+        let nr52_contents = map.read::<Byte>(NR52_ADDR);
+        // clumsy audio disable handling. todo: make it clear the registers, also probably handle all of it in the memory map with a special handler
+        if (nr52_contents & BIT_7_MASK) == 0 {
+            self.channel_1_active = false;
+            self.channel_2_active = false;
+            return
+        }
+
+        // handle trigger events
         // channel 1 trigger
         const NR10_ADDR: Address = 0xFF10;
         let nr10_contents = map.read::<Byte>(NR10_ADDR);
@@ -58,9 +72,13 @@ impl<'a> Apu<'a> {
         const NR14_ADDR: Address = 0xFF14;
         let nr14_contents = map.read::<Byte>(NR14_ADDR);
         
-        let ch1_triggered = (nr14_contents & BIT_7_MASK) > 0;
+        // let ch1_triggered = (nr14_contents & BIT_7_MASK) > 0;
+        let ch1_triggered = map.apu_ch1_trigger;
+        if ch1_triggered {
+            map.apu_ch1_trigger = false;
+        }
         // clear nr14 trigger bit after read
-        map.write::<Byte>(nr14_contents & !(BIT_7_MASK), NR14_ADDR);
+        // map.write::<Byte>(nr14_contents & !(BIT_7_MASK), NR14_ADDR);
         // refresh internal values with triggered values
         if ch1_triggered {
             // Reset the volume
@@ -71,11 +89,13 @@ impl<'a> Apu<'a> {
             let period = (nr13_contents as Word) | ((nr14_contents as Word & 0b111) << 8);
             self.channel_1_period_current = period as u32;
             // Reset the length counter
-            if self.channel_1_length_timer_current >= LENGTH_TIMER_EXPIRY {
+            if (self.channel_1_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_1_length_timer_current == 0) {
                 self.channel_1_length_timer_current = nr11_contents & 0x3F;
             }
             // Reset sweep values
             self.channel_1_sweep_pace_current = (nr10_contents >> 4) & 0b111;
+            // Activate channel
+            self.channel_1_active = true;
         }
 
         // channel 2 trigger
@@ -88,9 +108,13 @@ impl<'a> Apu<'a> {
         const NR24_ADDR: Address = 0xFF19;
         let nr24_contents = map.read::<Byte>(NR24_ADDR);
         
-        let ch2_triggered = (nr24_contents & BIT_7_MASK) > 0;
+        // let ch2_triggered = (nr24_contents & BIT_7_MASK) > 0;
+        let ch2_triggered = map.apu_ch2_trigger;
+        if ch2_triggered {
+            map.apu_ch2_trigger = false;
+        }
         // clear nr24 trigger bit after read
-        map.write::<Byte>(nr24_contents & !(BIT_7_MASK), NR24_ADDR);
+        // map.write::<Byte>(nr24_contents & !(BIT_7_MASK), NR24_ADDR);
         // refresh internal values with triggered values
         if ch2_triggered {
             // Reset the volume
@@ -101,37 +125,32 @@ impl<'a> Apu<'a> {
             let period = (nr23_contents as Word) | ((nr24_contents as Word & 0b111) << 8);
             self.channel_2_period_current = period as u32;
             // Reset the length counter
-            if self.channel_2_length_timer_current >= LENGTH_TIMER_EXPIRY {
+            if (self.channel_2_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_2_length_timer_current == 0) {
                 self.channel_2_length_timer_current = nr21_contents & 0x3F;
             }
+            // Activate channel
+            self.channel_2_active = true;
         }
 
+        let dbg_init_vol_ch1 = nr12_contents >> 4;
+        let dbg_init_vol_ch2 = nr22_contents >> 4;
+        
         // do timed events
         for _ in 0..dots_elapsed {
             self.current_timing_dot = (self.current_timing_dot + 1) % DOTS_MODULO;
-
-            // Adjust length timers
-            if (self.current_timing_dot % DOTS_PER_LENGTH_TICK) == 0 {
-                // adjust length
-                let channel_1_length_timer_enabled = (nr14_contents & (1 << 6)) > 0;
-                if channel_1_length_timer_enabled && self.channel_1_length_timer_current < LENGTH_TIMER_EXPIRY {
-                    self.channel_1_length_timer_current += 1;
-                }
-                let channel_2_length_timer_enabled = (nr24_contents & (1 << 6)) > 0;
-                if channel_2_length_timer_enabled && self.channel_2_length_timer_current < LENGTH_TIMER_EXPIRY {
-                    self.channel_2_length_timer_current += 1;
-                }
-            }
 
             // Channel 1 period sweep
             let channel_1_sweep_pace = self.channel_1_sweep_pace_current;
             let channel_1_sweep_increasing = (nr10_contents & 0b1000) > 0;
             let channel_1_sweep_step = nr10_contents & 0b111;
-            if (channel_1_sweep_pace > 0) && ((self.current_timing_dot % (DOTS_PER_SWEEP_TICK * channel_1_sweep_pace as u32)) == 0) {
+            if (self.channel_1_active) && (channel_1_sweep_pace > 0) && ((self.current_timing_dot % (DOTS_PER_SWEEP_TICK * channel_1_sweep_pace as u32)) == 0) {
                 let dbg_pre = self.channel_1_period_current;
-                if channel_1_sweep_increasing && ((self.channel_1_period_current >> 8) < 0x7FF) {
+                if ((self.channel_1_period_current >> 8) >= 0x7FF) || (self.channel_1_period_current == 0) {
+                    // on overflow, cut the channel
+                    self.channel_1_active = false;
+                } else if channel_1_sweep_increasing {
                     self.channel_1_period_current -= self.channel_1_period_current / 2_u32.pow(channel_1_sweep_step as u32);
-                } else if !channel_1_sweep_increasing && (self.channel_1_period_current > 0) {
+                } else if !channel_1_sweep_increasing {
                     self.channel_1_period_current += self.channel_1_period_current / 2_u32.pow(channel_1_sweep_step as u32);
                 }
                 // Write back modified period value
@@ -139,7 +158,31 @@ impl<'a> Apu<'a> {
                 let new_nr14 = (nr14_contents & 0xC0) | ((self.channel_1_period_current >> 8) as u8 & 0b111);
                 map.write(new_nr13, NR13_ADDR);
                 map.write(new_nr14, NR14_ADDR);
-                println!("DOT: {}, PACE: {}, STEP: {}, PRE: {}, POST: {}", self.current_timing_dot, channel_1_sweep_pace, channel_1_sweep_step, dbg_pre, self.channel_1_period_current);
+                // hack: disable trigger
+                map.apu_ch1_trigger = false;
+                map.apu_ch2_trigger = false;
+                //println!("DOT: {}, PACE: {}, STEP: {}, PRE: {}, POST: {}", self.current_timing_dot, channel_1_sweep_pace, channel_1_sweep_step, dbg_pre, self.channel_1_period_current);
+            }
+
+            // Adjust length timers
+            if (self.current_timing_dot % DOTS_PER_LENGTH_TICK) == 0 {
+                let dbg_ch1_pre_len = self.channel_1_length_timer_current;
+                let dbg_ch2_pre_len = self.channel_1_length_timer_current;
+                let channel_1_length_timer_enabled = (nr14_contents & (1 << 6)) > 0;
+                if channel_1_length_timer_enabled && (self.channel_1_length_timer_current < LENGTH_TIMER_EXPIRY) {
+                    self.channel_1_length_timer_current += 1;
+                    if self.channel_1_length_timer_current == LENGTH_TIMER_EXPIRY {
+                        self.channel_1_active = false;
+                    }
+                }
+                let channel_2_length_timer_enabled = (nr24_contents & (1 << 6)) > 0;
+                if channel_2_length_timer_enabled && (self.channel_2_length_timer_current < LENGTH_TIMER_EXPIRY) {
+                    self.channel_2_length_timer_current += 1;
+                    if self.channel_2_length_timer_current == LENGTH_TIMER_EXPIRY {
+                        self.channel_2_active = false;
+                    }
+                }
+                // println!("PRE_CH1: {}, POST_CH1: {} ----- PRE_CH2: {}, POST_CH2: {}", dbg_ch1_pre_len, self.channel_1_length_timer_current, dbg_ch2_pre_len, self.channel_2_length_timer_current);
             }
 
             // Volume sweeps
@@ -147,11 +190,13 @@ impl<'a> Apu<'a> {
             let channel_1_volume_sweep_pace = nr12_contents & 0b111;
             let channel_1_volume_sweep_increasing = (nr12_contents & 0b1000) > 0;
             if (channel_1_volume_sweep_pace > 0) && (self.current_timing_dot % (channel_1_volume_sweep_pace as u32 * DOTS_PER_VOLUME_ENVELOPE_TICK)) == 0 {
+                let dbg_pre_vol = self.channel_1_volume_current;
                 if channel_1_volume_sweep_increasing && (self.channel_1_volume_current < 0b1111) {
                     self.channel_1_volume_current += 1;
                 } else if !channel_1_volume_sweep_increasing && (self.channel_1_volume_current > 0) {
                     self.channel_1_volume_current -= 1;
                 }
+                // println!("PRE: {}, POST: {}", dbg_pre_vol, self.channel_1_volume_current);
             }
             // CH2
             let channel_2_volume_sweep_pace = nr22_contents & 0b111;
@@ -185,7 +230,8 @@ impl<'a> Apu<'a> {
         let frequency = 131072.0 / (2048.0 - self.channel_1_period_current as f32);
 
         const VOLUME_CAP: f32 = 0.05;
-        let volume: f32 = VOLUME_CAP * if self.channel_1_length_timer_current == 64 {
+        // Mute if the length timer is maxed or the channel is off
+        let volume: f32 = VOLUME_CAP * if !self.channel_1_active {
             0.0
         } 
         else {
@@ -219,7 +265,7 @@ impl<'a> Apu<'a> {
         let frequency = 131072.0 / (2048.0 - self.channel_2_period_current as f32);
 
         const VOLUME_CAP: f32 = 0.05;
-        let volume: f32 = VOLUME_CAP * if self.channel_2_length_timer_current == 64 {
+        let volume: f32 = VOLUME_CAP * if !self.channel_2_active {
             0.0
         } 
         else {

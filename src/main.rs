@@ -92,6 +92,12 @@ fn main() {
             if dots_elapsed == 0 {
                 cpu_locked = true;
             }
+
+            // Update APU after CPU because it operates at a finer dot granularity.
+            // CPU/PPU/APU should provide the illusion of operating in parallel
+            let (ch_1_wave, ch_2_wave) = apu.update_waves(4);
+            audio_player.update_channel_1(ch_1_wave);
+            audio_player.update_channel_2(ch_2_wave);
         }
         else {
             if cpu_locked {
@@ -103,10 +109,6 @@ fn main() {
                 debt -= dots_elapsed as i16;
             }
         }
-        // Catchup APU unconditionally
-        let (ch_1_wave, ch_2_wave) = apu.update_waves(dots_elapsed);
-        audio_player.update_channel_1(ch_1_wave);
-        audio_player.update_channel_2(ch_2_wave);
         
         // Things that happen once per frame go here
         if ppu.frame_is_ready() {
@@ -137,6 +139,7 @@ fn main() {
             // misc debug logging
             // println!("{:?}", ch_1_wave);
             //audio_player.update_channel_1(ch_1_wave);
+            //print!("debt: {} \n", debt);
         }
     }
 }

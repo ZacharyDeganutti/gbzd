@@ -218,6 +218,9 @@ pub struct MemoryMap<'a> {
     pub io_registers: SimpleRegion<'a>,
     hram: SimpleRegion<'a>,
     ie: SimpleRegion<'a>,
+    // special register traps
+    pub apu_ch1_trigger: bool,
+    pub apu_ch2_trigger: bool,
 }
 
 // TODO: Override get_bank to implement mapped addressing against a structure full of MemoryRegions
@@ -283,6 +286,7 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
     }
 
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
+        const BIT_7_MASK: u8 = 0x80;
         let _address = address as usize;
         if _address == IE_START {
             self.ie.write(value, address)
@@ -317,6 +321,19 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             }
             else if address == 0xFF07 {
                 self.timer.write_control(value.demote())
+            }
+            // APU channel triggers
+            else if address == 0xFF14 {
+                if (value.demote() & BIT_7_MASK) > 0 {
+                    self.apu_ch1_trigger = true;
+                    self.io_registers.write(value.demote(), address);
+                }
+            }
+            else if address == 0xFF19 {
+                if (value.demote() & BIT_7_MASK) > 0 {
+                    self.apu_ch2_trigger = true;
+                    self.io_registers.write(value.demote(), address);
+                }
             }
             else if address == 0xFF46 {
                 self.dma(value.demote())
@@ -388,6 +405,9 @@ impl<'a> MemoryMap<'a> {
             io_registers: SimpleRegion { start: IOREGS_START as Address, data: &mut data.io_registers },
             hram: SimpleRegion { start: HRAM_START as Address, data: &mut data.hram },
             ie: SimpleRegion { start: IE_START as Address, data: &mut data.ie },
+            // magic registers
+            apu_ch1_trigger: false,
+            apu_ch2_trigger: false,
         }
     }
 

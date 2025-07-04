@@ -18,7 +18,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use audio::audio::{AudioPlayer, DutyCycle, SdlAudio, SquareWave};
+use audio::audio::{DutyCycle, GbAudioSdl, SquareWave, SampleWave};
 use audio::apu::{Apu};
 use display::DisplayMiniFB;
 
@@ -52,20 +52,20 @@ fn main() {
     let mut input_handler = InputHandler::new(controllers, system_memory.clone());
 
     let sdl_context = sdl3::init().unwrap();
-    let mut audio_player = AudioPlayer::new(SdlAudio::new(&sdl_context));
+    let mut audio_player = GbAudioSdl::new(&sdl_context);
 
-    let mut wave_440 = SquareWave {
+    let default_square_wave = SquareWave {
         duty_cycle: DutyCycle::Half,
-        volume: 0.01,
+        volume: 0.00,
         frequency: 440.0,
     };
-    let mut wave_1000 = SquareWave {
-        duty_cycle: DutyCycle::Half,
-        volume: 0.01,
-        frequency: 1000.0,
+    let default_sample_wave = SampleWave {
+        volume_samples: [0.0; 32],
+        frequency: 440.0,
     };
-    audio_player.start_channel_1(wave_440);
-    audio_player.start_channel_2(wave_440);
+    audio_player.start_channel_1(default_square_wave);
+    audio_player.start_channel_2(default_square_wave);
+    audio_player.start_channel_3(default_sample_wave);
 
     let mut display = DisplayMiniFB::new();
 
@@ -95,9 +95,10 @@ fn main() {
 
             // Update APU after CPU because it operates at a finer dot granularity.
             // CPU/PPU/APU should provide the illusion of operating in parallel
-            let (ch_1_wave, ch_2_wave) = apu.update_waves(4);
+            let (ch_1_wave, ch_2_wave, ch_3_wave) = apu.update_waves(4);
             audio_player.update_channel_1(ch_1_wave);
             audio_player.update_channel_2(ch_2_wave);
+            audio_player.update_channel_3(ch_3_wave);
         }
         else {
             if cpu_locked {

@@ -1,5 +1,5 @@
-use std::{cell::RefCell, rc::Rc};
-use crate::memory_gb::{Address, Byte, MemoryMap, MemoryRegion, Word};
+use std::{cell::RefCell, ops::Add, rc::Rc};
+use crate::{audio::audio::SampleWave, memory_gb::{Address, Byte, MemoryMap, MemoryRegion, Word}};
 
 use super::audio::{DutyCycle, SquareWave};
 
@@ -18,11 +18,18 @@ pub struct Apu<'a> {
     channel_1_sweep_pace_current: u8,
     channel_1_period_current: u32,
     channel_1_active: bool,
+
     channel_2_volume_current: u8,
     channel_2_length_timer_current: u8,
     channel_2_sweep_pace_current: u8,
     channel_2_period_current: u32,
     channel_2_active: bool,
+
+    channel_3_volume_shift: u8,
+    channel_3_length_timer_current: u8,
+    channel_3_period_current: u32,
+    channel_3_wave_ram: [u8; 16],
+    channel_3_active: bool,
 }
 
 impl<'a> Apu<'a> {
@@ -35,11 +42,18 @@ impl<'a> Apu<'a> {
             channel_1_sweep_pace_current: 0,
             channel_1_period_current: 0,
             channel_1_active: false,
+
             channel_2_volume_current: 0,
             channel_2_length_timer_current: 0,
             channel_2_sweep_pace_current: 0,
             channel_2_period_current: 0,
             channel_2_active: false,
+
+            channel_3_volume_shift: 0,
+            channel_3_length_timer_current: 0,
+            channel_3_period_current: 0,
+            channel_3_wave_ram: [0; 16],
+            channel_3_active: false,
         }
     }
 
@@ -72,13 +86,11 @@ impl<'a> Apu<'a> {
         const NR14_ADDR: Address = 0xFF14;
         let nr14_contents = map.read::<Byte>(NR14_ADDR);
         
-        // let ch1_triggered = (nr14_contents & BIT_7_MASK) > 0;
         let ch1_triggered = map.apu_ch1_trigger;
         if ch1_triggered {
             map.apu_ch1_trigger = false;
         }
-        // clear nr14 trigger bit after read
-        // map.write::<Byte>(nr14_contents & !(BIT_7_MASK), NR14_ADDR);
+
         // refresh internal values with triggered values
         if ch1_triggered {
             // Reset the volume
@@ -108,13 +120,11 @@ impl<'a> Apu<'a> {
         const NR24_ADDR: Address = 0xFF19;
         let nr24_contents = map.read::<Byte>(NR24_ADDR);
         
-        // let ch2_triggered = (nr24_contents & BIT_7_MASK) > 0;
         let ch2_triggered = map.apu_ch2_trigger;
         if ch2_triggered {
             map.apu_ch2_trigger = false;
         }
-        // clear nr24 trigger bit after read
-        // map.write::<Byte>(nr24_contents & !(BIT_7_MASK), NR24_ADDR);
+
         // refresh internal values with triggered values
         if ch2_triggered {
             // Reset the volume
@@ -132,8 +142,52 @@ impl<'a> Apu<'a> {
             self.channel_2_active = true;
         }
 
-        let dbg_init_vol_ch1 = nr12_contents >> 4;
-        let dbg_init_vol_ch2 = nr22_contents >> 4;
+        // channel 3 trigger
+        const NR30_ADDRESS: Address = 0xFF1A;
+        let nr30_contents = map.read::<Byte>(NR30_ADDRESS);
+        const NR31_ADDRESS: Address = 0xFF1B;
+        let nr31_contents = map.read::<Byte>(NR31_ADDRESS);
+        const NR32_ADDR: Address = 0xFF1C;
+        let nr32_contents = map.read::<Byte>(NR32_ADDR);
+        const NR33_ADDR: Address = 0xFF1D;
+        let nr33_contents = map.read::<Byte>(NR33_ADDR);
+        const NR34_ADDR: Address = 0xFF1E;
+        let nr34_contents = map.read::<Byte>(NR34_ADDR);
+
+        let ch3_triggered = map.apu_ch3_trigger;
+        if ch3_triggered {
+            map.apu_ch3_trigger = false;
+        }
+
+        // Constantly reload wave RAM regardless of triggering because we're going offroading from the real behavior anyway
+        const WAVE_RAM_BASE_ADDRESS: Address = 0xFF30;
+        for wave_ram_byte_offset in 0..self.channel_3_wave_ram.len() {
+            self.channel_3_wave_ram[wave_ram_byte_offset] = map.read(WAVE_RAM_BASE_ADDRESS + wave_ram_byte_offset as Address);
+        }
+
+        // refresh internal values with triggered values
+        if ch3_triggered {
+            // Check the DAC status
+            let dac_enabled = (nr30_contents & BIT_7_MASK) > 0;
+
+            // Reset the volume
+            let ch3_output_level = nr32_contents >> 5;
+            self.channel_3_volume_shift = if ch3_output_level == 0 { 4 } else { ch3_output_level - 1 };
+            
+            // Reload the period/frequency value
+            let period = (nr33_contents as Word) | ((nr34_contents as Word & 0b111) << 8);
+            self.channel_3_period_current = period as u32;
+
+            // Reset the length counter
+            if (self.channel_3_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_3_length_timer_current == 0) {
+                self.channel_3_length_timer_current = nr31_contents & 0x3F;
+            }
+
+            // Don't bother with resetting the phase on trigger, it's probably not that noticeable
+
+            // Activate channel if the dac is enabled
+            self.channel_3_active = dac_enabled;
+        }
         
         // do timed events
         for _ in 0..dots_elapsed {
@@ -159,15 +213,14 @@ impl<'a> Apu<'a> {
                 map.write(new_nr13, NR13_ADDR);
                 map.write(new_nr14, NR14_ADDR);
                 // hack: disable trigger
-                map.apu_ch1_trigger = false;
-                map.apu_ch2_trigger = false;
+                //map.apu_ch1_trigger = false;
+                //map.apu_ch2_trigger = false;
+                //map.apu_ch3_trigger = false;
                 //println!("DOT: {}, PACE: {}, STEP: {}, PRE: {}, POST: {}", self.current_timing_dot, channel_1_sweep_pace, channel_1_sweep_step, dbg_pre, self.channel_1_period_current);
             }
 
             // Adjust length timers
             if (self.current_timing_dot % DOTS_PER_LENGTH_TICK) == 0 {
-                let dbg_ch1_pre_len = self.channel_1_length_timer_current;
-                let dbg_ch2_pre_len = self.channel_1_length_timer_current;
                 let channel_1_length_timer_enabled = (nr14_contents & (1 << 6)) > 0;
                 if channel_1_length_timer_enabled && (self.channel_1_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_1_length_timer_current += 1;
@@ -182,7 +235,13 @@ impl<'a> Apu<'a> {
                         self.channel_2_active = false;
                     }
                 }
-                // println!("PRE_CH1: {}, POST_CH1: {} ----- PRE_CH2: {}, POST_CH2: {}", dbg_ch1_pre_len, self.channel_1_length_timer_current, dbg_ch2_pre_len, self.channel_2_length_timer_current);
+                let channel_3_length_timer_enabled = (nr34_contents & (1 << 6)) > 0;
+                if channel_3_length_timer_enabled && (self.channel_3_length_timer_current < LENGTH_TIMER_EXPIRY) {
+                    self.channel_3_length_timer_current += 1;
+                    if self.channel_3_length_timer_current == LENGTH_TIMER_EXPIRY {
+                        self.channel_3_active = false;
+                    }
+                }
             }
 
             // Volume sweeps
@@ -190,13 +249,11 @@ impl<'a> Apu<'a> {
             let channel_1_volume_sweep_pace = nr12_contents & 0b111;
             let channel_1_volume_sweep_increasing = (nr12_contents & 0b1000) > 0;
             if (channel_1_volume_sweep_pace > 0) && (self.current_timing_dot % (channel_1_volume_sweep_pace as u32 * DOTS_PER_VOLUME_ENVELOPE_TICK)) == 0 {
-                let dbg_pre_vol = self.channel_1_volume_current;
                 if channel_1_volume_sweep_increasing && (self.channel_1_volume_current < 0b1111) {
                     self.channel_1_volume_current += 1;
                 } else if !channel_1_volume_sweep_increasing && (self.channel_1_volume_current > 0) {
                     self.channel_1_volume_current -= 1;
                 }
-                // println!("PRE: {}, POST: {}", dbg_pre_vol, self.channel_1_volume_current);
             }
             // CH2
             let channel_2_volume_sweep_pace = nr22_contents & 0b111;
@@ -280,11 +337,41 @@ impl<'a> Apu<'a> {
         }
     }
 
-    pub fn update_waves(&mut self, dots_elapsed: u16) -> (SquareWave, SquareWave) {
+    fn parse_channel_3(&self) -> SampleWave<32> {
+        let frequency = 65536.0 / (2048.0 - self.channel_3_period_current as f32);
+        let volume_shift = if self.channel_1_active { self.channel_3_volume_shift } else { 4 };
+        
+        const SAMPLE_COUNT: usize = 32;
+
+        let mut volume_samples: [f32; SAMPLE_COUNT] = [0.0; SAMPLE_COUNT];
+
+        const VOLUME_CAP: f32 = 0.05;
+
+        for byte_offset in 0..self.channel_3_wave_ram.len() {
+            let index = byte_offset * 2;
+
+            let upper_sample = ((self.channel_3_wave_ram[byte_offset] & 0xF0) >> 4) >> volume_shift;
+            let lower_sample = (self.channel_3_wave_ram[byte_offset] & 0x0F) >> volume_shift;
+
+            let upper_f32_sample = (upper_sample as f32 - ((0xF >> volume_shift) as f32 / 2.0)) / 7.5;
+            let lower_f32_sample = (lower_sample as f32 - ((0xF >> volume_shift) as f32 / 2.0)) / 7.5;
+
+            volume_samples[index] = VOLUME_CAP * upper_f32_sample;
+            volume_samples[index + 1] = VOLUME_CAP * lower_f32_sample;
+        }
+
+        SampleWave { 
+            volume_samples, 
+            frequency
+        }
+    }
+
+    pub fn update_waves(&mut self, dots_elapsed: u16) -> (SquareWave, SquareWave, SampleWave<32>) {
         self.catchup_registers(dots_elapsed);
         return (
             self.parse_channel_1(),
-            self.parse_channel_2()
+            self.parse_channel_2(),
+            self.parse_channel_3()
         )
     }
 }

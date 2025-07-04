@@ -221,6 +221,7 @@ pub struct MemoryMap<'a> {
     // special register traps
     pub apu_ch1_trigger: bool,
     pub apu_ch2_trigger: bool,
+    pub apu_ch3_trigger: bool,
 }
 
 // TODO: Override get_bank to implement mapped addressing against a structure full of MemoryRegions
@@ -324,17 +325,18 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             }
             // APU channel triggers
             else if address == 0xFF14 {
-                if (value.demote() & BIT_7_MASK) > 0 {
-                    self.apu_ch1_trigger = true;
-                    self.io_registers.write(value.demote(), address);
-                }
+                self.apu_ch1_trigger = (value.demote() & BIT_7_MASK) > 0;
+                self.io_registers.write(value.demote(), address);
             }
             else if address == 0xFF19 {
-                if (value.demote() & BIT_7_MASK) > 0 {
-                    self.apu_ch2_trigger = true;
-                    self.io_registers.write(value.demote(), address);
-                }
+                self.apu_ch2_trigger = (value.demote() & BIT_7_MASK) > 0;
+                self.io_registers.write(value.demote(), address);
             }
+            else if address == 0xFF1E {
+                self.apu_ch3_trigger = (value.demote() & BIT_7_MASK) > 0;
+                self.io_registers.write(value.demote(), address);
+            }
+            // DMA
             else if address == 0xFF46 {
                 self.dma(value.demote())
             }
@@ -408,6 +410,7 @@ impl<'a> MemoryMap<'a> {
             // magic registers
             apu_ch1_trigger: false,
             apu_ch2_trigger: false,
+            apu_ch3_trigger: false,
         }
     }
 

@@ -95,7 +95,7 @@ fn main() {
 
             // Update APU after CPU because it operates at a finer dot granularity.
             // CPU/PPU/APU should provide the illusion of operating in parallel
-            let (ch_1_wave, ch_2_wave, ch_3_wave) = apu.update_waves(4);
+            let (ch_1_wave, ch_2_wave, ch_3_wave) = apu.update_waves(dots_elapsed);
             audio_player.update_channel_1(ch_1_wave);
             audio_player.update_channel_2(ch_2_wave);
             audio_player.update_channel_3(ch_3_wave);
@@ -110,6 +110,7 @@ fn main() {
                 debt -= dots_elapsed as i16;
             }
         }
+        // println!("debt: {}", debt);
         
         // Things that happen once per frame go here
         if ppu.frame_is_ready() {
@@ -132,7 +133,7 @@ fn main() {
             // Clock in the time taken as late as possible for a decent sleep timing
             frame_time_end = Instant::now();
             let frame_time_elapsed = frame_time_end - frame_time_start;
-            // println!("frame start {:?}, frame end {:?}, duration {:?}", frame_time_start, frame_time_end, frame_time_elapsed);
+            println!("frame start {:?}, frame end {:?}, duration {:?}", frame_time_start, frame_time_end, frame_time_elapsed);
             if frame_time_elapsed < FRAME_TIME_TOTAL {
                 sleep(FRAME_TIME_TOTAL - frame_time_elapsed);
             }

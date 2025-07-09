@@ -24,9 +24,6 @@ impl DisplayMiniFB {
             },
         )
         .expect("Unable to create the window");
-        
-        // window.set_target_fps(60);
-        window.limit_update_rate(None);
 
         window.set_icon(Icon::from_str("images/ziti_icon.ico").unwrap());
 

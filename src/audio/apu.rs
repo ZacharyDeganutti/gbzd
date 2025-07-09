@@ -21,7 +21,6 @@ pub struct Apu<'a> {
 
     channel_2_volume_current: u8,
     channel_2_length_timer_current: u8,
-    channel_2_sweep_pace_current: u8,
     channel_2_period_current: u32,
     channel_2_active: bool,
 
@@ -45,7 +44,6 @@ impl<'a> Apu<'a> {
 
             channel_2_volume_current: 0,
             channel_2_length_timer_current: 0,
-            channel_2_sweep_pace_current: 0,
             channel_2_period_current: 0,
             channel_2_active: false,
 
@@ -70,6 +68,7 @@ impl<'a> Apu<'a> {
         if (nr52_contents & BIT_7_MASK) == 0 {
             self.channel_1_active = false;
             self.channel_2_active = false;
+            self.channel_3_active = false;
             return
         }
 
@@ -240,6 +239,7 @@ impl<'a> Apu<'a> {
                     self.channel_3_length_timer_current += 1;
                     if self.channel_3_length_timer_current == LENGTH_TIMER_EXPIRY {
                         self.channel_3_active = false;
+                        println!("ch3 cut!");
                     }
                 }
             }
@@ -339,7 +339,7 @@ impl<'a> Apu<'a> {
 
     fn parse_channel_3(&self) -> SampleWave<32> {
         let frequency = 65536.0 / (2048.0 - self.channel_3_period_current as f32);
-        let volume_shift = if self.channel_1_active { self.channel_3_volume_shift } else { 4 };
+        let volume_shift = if self.channel_3_active { self.channel_3_volume_shift } else { 4 };
         
         const SAMPLE_COUNT: usize = 32;
 

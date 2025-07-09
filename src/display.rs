@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use minifb::{Icon, ScaleMode, Window, WindowOptions};
 
-
 pub struct DisplayMiniFB {
     pub width: usize,
     pub height: usize,

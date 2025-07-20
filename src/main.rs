@@ -9,7 +9,8 @@ mod audio {
 }
 mod memory_gb;
 mod cart;
-mod special_registers;
+mod timer;
+mod apu_registers;
 mod ppu;
 mod display;
 mod input;
@@ -95,7 +96,7 @@ fn main() {
 
             // Update APU after CPU because it operates at a finer dot granularity.
             // CPU/PPU/APU should provide the illusion of operating in parallel
-            let (ch_1_wave, ch_2_wave, ch_3_wave) = apu.update_waves(dots_elapsed);
+            let (ch_1_wave, ch_2_wave, ch_3_wave) = apu.update_waves();
             audio_player.update_channel_1(ch_1_wave);
             audio_player.update_channel_2(ch_2_wave);
             audio_player.update_channel_3(ch_3_wave);

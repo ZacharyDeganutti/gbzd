@@ -243,7 +243,7 @@ impl<'a> Ppu<'a> {
             (lcdc & (1 << 7)) > 0
         };
         // If the LCD is disabled, refresh all the state and boot back control
-        /*
+        
         if !running {
             self.current_mode = RenderMode::VBlank;
             self.current_dot = DOT_MAX;
@@ -252,7 +252,7 @@ impl<'a> Ppu<'a> {
             self.internal_window_line_counter = 0;
             return 1
         }
-        */
+        
         let dots_spent = match self.current_mode {
             RenderMode::OAMScan => {
                 // Scan the whole OAM in one shot since coroutines aren't 'real' yet

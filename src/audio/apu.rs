@@ -12,7 +12,6 @@ const DOT_DURATION: f32 = 1.0 / 2_u32.pow(22) as f32;
 
 pub struct Apu<'a> {
     memory: Rc<RefCell<MemoryMap<'a>>>,
-    current_timing_dot: u32,
     channel_1_volume_current: u8,
     channel_1_length_timer_current: u8,
     channel_1_sweep_pace_current: u8,
@@ -29,13 +28,15 @@ pub struct Apu<'a> {
     channel_3_period_current: u32,
     channel_3_wave_ram: [u8; 16],
     channel_3_active: bool,
+
+    divider_previous: u8,
+    divider_counter: u32,
 }
 
 impl<'a> Apu<'a> {
     pub fn new(memory_map: Rc<RefCell<MemoryMap<'a>>>) -> Apu<'a> {
         Apu {
             memory: memory_map,
-            current_timing_dot: 0,
             channel_1_volume_current: 0,
             channel_1_length_timer_current: 0,
             channel_1_sweep_pace_current: 0,
@@ -52,13 +53,17 @@ impl<'a> Apu<'a> {
             channel_3_period_current: 0,
             channel_3_wave_ram: [0; 16],
             channel_3_active: false,
+
+            divider_previous: 0,
+            divider_counter: 0,
         }
     }
 
-    fn catchup_registers(&mut self, dots_elapsed: u16) {
+    fn catchup_registers(&mut self) {
         const LENGTH_TIMER_EXPIRY: u8 = 64;
         let mut map = self.memory.borrow_mut();
 
+        const BIT_4_MASK: u8 = 1 << 4;
         const BIT_7_MASK: u8 = 1 << 7;
 
         // handle global stuff
@@ -74,88 +79,69 @@ impl<'a> Apu<'a> {
 
         // handle trigger events
         // channel 1 trigger
-        const NR10_ADDR: Address = 0xFF10;
-        let nr10_contents = map.read::<Byte>(NR10_ADDR);
-        const NR11_ADDRESS: Address = 0xFF11;
-        let nr11_contents = map.read::<Byte>(NR11_ADDRESS);
-        const NR12_ADDR: Address = 0xFF12;
-        let nr12_contents = map.read::<Byte>(NR12_ADDR);
-        const NR13_ADDR: Address = 0xFF13;
-        let nr13_contents = map.read::<Byte>(NR13_ADDR);
-        const NR14_ADDR: Address = 0xFF14;
-        let nr14_contents = map.read::<Byte>(NR14_ADDR);
-        
-        let ch1_triggered = map.apu_ch1_trigger;
+        let ch1_triggered = map.apu_state.ch1_to_trigger;
         if ch1_triggered {
-            map.apu_ch1_trigger = false;
+            map.apu_state.ch1_to_trigger = false;
         }
 
         // refresh internal values with triggered values
         if ch1_triggered {
             // Reset the volume
-            let ch1_init_volume = nr12_contents >> 4;
+            let ch1_init_volume = map.apu_state.channel_1_initial_volume();
             self.channel_1_volume_current = ch1_init_volume;
+
             // Reload the period/frequency value
-            
-            let period = (nr13_contents as Word) | ((nr14_contents as Word & 0b111) << 8);
+            let period = map.apu_state.channel_1_period();
             self.channel_1_period_current = period as u32;
             // Reset the length counter
             if (self.channel_1_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_1_length_timer_current == 0) {
-                self.channel_1_length_timer_current = nr11_contents & 0x3F;
+                self.channel_1_length_timer_current = map.apu_state.channel_1_length_timer();
             }
             // Reset sweep values
-            self.channel_1_sweep_pace_current = (nr10_contents >> 4) & 0b111;
+            self.channel_1_sweep_pace_current = map.apu_state.channel_1_sweep_pace();
             // Activate channel
             self.channel_1_active = true;
+            // println!("TRIGGER CH1");
+        }
+
+        // update ch1 period if it was overwritten
+        if map.apu_state.ch1_period_to_update {
+            self.channel_1_period_current = map.apu_state.channel_1_period() as u32;
+            map.apu_state.ch1_period_to_update = false;
         }
 
         // channel 2 trigger
-        const NR21_ADDRESS: Address = 0xFF16;
-        let nr21_contents = map.read::<Byte>(NR21_ADDRESS);
-        const NR22_ADDR: Address = 0xFF17;
-        let nr22_contents = map.read::<Byte>(NR22_ADDR);
-        const NR23_ADDR: Address = 0xFF18;
-        let nr23_contents = map.read::<Byte>(NR23_ADDR);
-        const NR24_ADDR: Address = 0xFF19;
-        let nr24_contents = map.read::<Byte>(NR24_ADDR);
-        
-        let ch2_triggered = map.apu_ch2_trigger;
+        let ch2_triggered = map.apu_state.ch2_to_trigger;
         if ch2_triggered {
-            map.apu_ch2_trigger = false;
+            map.apu_state.ch2_to_trigger = false;
         }
 
         // refresh internal values with triggered values
         if ch2_triggered {
             // Reset the volume
-            let ch2_init_volume = nr22_contents >> 4;
+            let ch2_init_volume = map.apu_state.channel_2_initial_volume();
             self.channel_2_volume_current = ch2_init_volume;
             // Reload the period/frequency value
-            
-            let period = (nr23_contents as Word) | ((nr24_contents as Word & 0b111) << 8);
+            let period = map.apu_state.channel_2_period();
             self.channel_2_period_current = period as u32;
             // Reset the length counter
             if (self.channel_2_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_2_length_timer_current == 0) {
-                self.channel_2_length_timer_current = nr21_contents & 0x3F;
+                self.channel_2_length_timer_current = map.apu_state.channel_2_length_timer();
             }
             // Activate channel
             self.channel_2_active = true;
         }
 
-        // channel 3 trigger
-        const NR30_ADDRESS: Address = 0xFF1A;
-        let nr30_contents = map.read::<Byte>(NR30_ADDRESS);
-        const NR31_ADDRESS: Address = 0xFF1B;
-        let nr31_contents = map.read::<Byte>(NR31_ADDRESS);
-        const NR32_ADDR: Address = 0xFF1C;
-        let nr32_contents = map.read::<Byte>(NR32_ADDR);
-        const NR33_ADDR: Address = 0xFF1D;
-        let nr33_contents = map.read::<Byte>(NR33_ADDR);
-        const NR34_ADDR: Address = 0xFF1E;
-        let nr34_contents = map.read::<Byte>(NR34_ADDR);
+        // update ch2 period if it was overwritten
+        if map.apu_state.ch2_period_to_update {
+            self.channel_2_period_current = map.apu_state.channel_2_period() as u32;
+            map.apu_state.ch2_period_to_update = false;
+        }
 
-        let ch3_triggered = map.apu_ch3_trigger;
+        // channel 3 trigger
+        let ch3_triggered = map.apu_state.ch3_to_trigger;
         if ch3_triggered {
-            map.apu_ch3_trigger = false;
+            map.apu_state.ch3_to_trigger = false;
         }
 
         // Constantly reload wave RAM regardless of triggering because we're going offroading from the real behavior anyway
@@ -167,19 +153,19 @@ impl<'a> Apu<'a> {
         // refresh internal values with triggered values
         if ch3_triggered {
             // Check the DAC status
-            let dac_enabled = (nr30_contents & BIT_7_MASK) > 0;
+            let dac_enabled = map.apu_state.channel_3_dac_enabled();
 
             // Reset the volume
-            let ch3_output_level = nr32_contents >> 5;
+            let ch3_output_level = map.apu_state.channel_3_output_level();
             self.channel_3_volume_shift = if ch3_output_level == 0 { 4 } else { ch3_output_level - 1 };
             
             // Reload the period/frequency value
-            let period = (nr33_contents as Word) | ((nr34_contents as Word & 0b111) << 8);
+            let period = map.apu_state.channel_3_period();
             self.channel_3_period_current = period as u32;
 
             // Reset the length counter
             if (self.channel_3_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_3_length_timer_current == 0) {
-                self.channel_3_length_timer_current = nr31_contents & 0x3F;
+                self.channel_3_length_timer_current = map.apu_state.channel_3_length_timer();
             }
 
             // Don't bother with resetting the phase on trigger, it's probably not that noticeable
@@ -188,16 +174,53 @@ impl<'a> Apu<'a> {
             self.channel_3_active = dac_enabled;
         }
         
-        // do timed events
-        for _ in 0..dots_elapsed {
-            self.current_timing_dot = (self.current_timing_dot + 1) % DOTS_MODULO;
+        // update ch3 period if it was overwritten
+        if map.apu_state.ch3_period_to_update {
+            self.channel_3_period_current = map.apu_state.channel_3_period() as u32;
+            map.apu_state.ch3_period_to_update = false;
+        }
 
-            // Channel 1 period sweep
+        // Reset the volume. The one in the trigger block can probably be removed for redundancy,
+        // but that's explicitly defined as something that happens on trigger. There's probably something
+        // incorrect about doing this every time, but it sounds correct in more cases to do so.
+        let ch3_output_level = map.apu_state.channel_3_output_level();
+        self.channel_3_volume_shift = if ch3_output_level == 0 { 4 } else { ch3_output_level - 1 };
+        
+        // do timed events when the apu divider counter triggers
+        const DIV_ADDR: Address = 0xFF04;
+        let current_divider = map.read::<Byte>(DIV_ADDR);
+
+        let pre_check_divider_counter = self.divider_counter;
+
+        let mut update_div_apu_counter = |prev_divider| {
+            let bit_4_falling_edge = ((prev_divider & BIT_4_MASK) & ((prev_divider ^ current_divider) & BIT_4_MASK)) > 0;
+            if bit_4_falling_edge {
+                self.divider_counter = self.divider_counter.wrapping_add(1);
+            }
+        };
+        // If the divider was reset, just check against the last value once
+        if map.div_reset {
+            update_div_apu_counter(self.divider_previous);
+            map.div_reset = false;
+            self.divider_previous = current_divider;
+        }
+        // Otherwise it's necessary to 'catch up' the cycles.
+        else {
+            while self.divider_previous != current_divider {
+                update_div_apu_counter(self.divider_previous);
+                self.divider_previous = self.divider_previous.wrapping_add(1);
+            }
+        }
+        let post_check_divider_counter = self.divider_counter;
+
+        let divider_counter_changed = (pre_check_divider_counter ^ post_check_divider_counter) > 0;
+
+        if divider_counter_changed {
+            // Channel 1 period sweep (every 4 * pace div-apu ticks)
             let channel_1_sweep_pace = self.channel_1_sweep_pace_current;
-            let channel_1_sweep_increasing = (nr10_contents & 0b1000) > 0;
-            let channel_1_sweep_step = nr10_contents & 0b111;
-            if (self.channel_1_active) && (channel_1_sweep_pace > 0) && ((self.current_timing_dot % (DOTS_PER_SWEEP_TICK * channel_1_sweep_pace as u32)) == 0) {
-                let dbg_pre = self.channel_1_period_current;
+            let channel_1_sweep_increasing = map.apu_state.channel_1_sweep_increasing();
+            let channel_1_sweep_step = map.apu_state.channel_1_sweep_step();
+            if (self.channel_1_active) && (channel_1_sweep_pace > 0) && ((self.divider_counter % (channel_1_sweep_pace as u32 * 4)) == 0) {
                 if ((self.channel_1_period_current >> 8) >= 0x7FF) || (self.channel_1_period_current == 0) {
                     // on overflow, cut the channel
                     self.channel_1_active = false;
@@ -208,47 +231,41 @@ impl<'a> Apu<'a> {
                 }
                 // Write back modified period value
                 let new_nr13 = (self.channel_1_period_current & 0xFF) as u8;
-                let new_nr14 = (nr14_contents & 0xC0) | ((self.channel_1_period_current >> 8) as u8 & 0b111);
-                map.write(new_nr13, NR13_ADDR);
-                map.write(new_nr14, NR14_ADDR);
-                // hack: disable trigger
-                //map.apu_ch1_trigger = false;
-                //map.apu_ch2_trigger = false;
-                //map.apu_ch3_trigger = false;
-                //println!("DOT: {}, PACE: {}, STEP: {}, PRE: {}, POST: {}", self.current_timing_dot, channel_1_sweep_pace, channel_1_sweep_step, dbg_pre, self.channel_1_period_current);
+                let new_nr14 = (map.apu_state.read_nr14() & 0xC0) | ((self.channel_1_period_current >> 8) as u8 & 0b111);
+                map.apu_state.write_nr13(new_nr13);
+                map.apu_state.write_nr14(new_nr14);
             }
-
-            // Adjust length timers
-            if (self.current_timing_dot % DOTS_PER_LENGTH_TICK) == 0 {
-                let channel_1_length_timer_enabled = (nr14_contents & (1 << 6)) > 0;
+            
+            // Adjust length timers (every 2 div-apu ticks)
+            if (self.divider_counter % 2) == 0 {
+                let channel_1_length_timer_enabled = map.apu_state.channel_1_length_timer_enabled();
                 if channel_1_length_timer_enabled && (self.channel_1_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_1_length_timer_current += 1;
                     if self.channel_1_length_timer_current == LENGTH_TIMER_EXPIRY {
                         self.channel_1_active = false;
                     }
                 }
-                let channel_2_length_timer_enabled = (nr24_contents & (1 << 6)) > 0;
+                let channel_2_length_timer_enabled = map.apu_state.channel_2_length_timer_enabled();
                 if channel_2_length_timer_enabled && (self.channel_2_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_2_length_timer_current += 1;
                     if self.channel_2_length_timer_current == LENGTH_TIMER_EXPIRY {
                         self.channel_2_active = false;
                     }
                 }
-                let channel_3_length_timer_enabled = (nr34_contents & (1 << 6)) > 0;
+                let channel_3_length_timer_enabled = map.apu_state.channel_3_length_timer_enabled();
                 if channel_3_length_timer_enabled && (self.channel_3_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_3_length_timer_current += 1;
                     if self.channel_3_length_timer_current == LENGTH_TIMER_EXPIRY {
                         self.channel_3_active = false;
-                        println!("ch3 cut!");
                     }
                 }
             }
 
-            // Volume sweeps
+            // Volume sweeps (every 8 * pace div-apu ticks)
             // CH1
-            let channel_1_volume_sweep_pace = nr12_contents & 0b111;
-            let channel_1_volume_sweep_increasing = (nr12_contents & 0b1000) > 0;
-            if (channel_1_volume_sweep_pace > 0) && (self.current_timing_dot % (channel_1_volume_sweep_pace as u32 * DOTS_PER_VOLUME_ENVELOPE_TICK)) == 0 {
+            let channel_1_volume_sweep_pace = map.apu_state.channel_1_volume_sweep_pace();
+            let channel_1_volume_sweep_increasing = map.apu_state.channel_1_volume_sweep_increasing();
+            if (channel_1_volume_sweep_pace > 0) && (self.divider_counter % (channel_1_volume_sweep_pace as u32 * 8)) == 0 {
                 if channel_1_volume_sweep_increasing && (self.channel_1_volume_current < 0b1111) {
                     self.channel_1_volume_current += 1;
                 } else if !channel_1_volume_sweep_increasing && (self.channel_1_volume_current > 0) {
@@ -256,9 +273,9 @@ impl<'a> Apu<'a> {
                 }
             }
             // CH2
-            let channel_2_volume_sweep_pace = nr22_contents & 0b111;
-            let channel_2_volume_sweep_increasing = (nr22_contents & 0b1000) > 0;
-            if (channel_2_volume_sweep_pace > 0) && (self.current_timing_dot % (channel_2_volume_sweep_pace as u32 * DOTS_PER_VOLUME_ENVELOPE_TICK)) == 0 {
+            let channel_2_volume_sweep_pace = map.apu_state.channel_2_volume_sweep_pace();
+            let channel_2_volume_sweep_increasing = map.apu_state.channel_2_volume_sweep_increasing();
+            if (channel_2_volume_sweep_pace > 0) && (self.divider_counter % (channel_2_volume_sweep_pace as u32 * 8)) == 0 {
                 if channel_2_volume_sweep_increasing && (self.channel_2_volume_current < 0b1111) {
                     self.channel_2_volume_current += 1;
                 } else if !channel_2_volume_sweep_increasing && (self.channel_2_volume_current > 0) {
@@ -366,8 +383,8 @@ impl<'a> Apu<'a> {
         }
     }
 
-    pub fn update_waves(&mut self, dots_elapsed: u16) -> (SquareWave, SquareWave, SampleWave<32>) {
-        self.catchup_registers(dots_elapsed);
+    pub fn update_waves(&mut self) -> (SquareWave, SquareWave, SampleWave<32>) {
+        self.catchup_registers();
         return (
             self.parse_channel_1(),
             self.parse_channel_2(),

@@ -1,9 +1,5 @@
 use sdl3;
-use std::sync::mpsc::{channel, Receiver, Sender};
-
-pub trait IsWave {
-    
-}
+use std::{collections::VecDeque, rc::Rc, sync::{mpsc::{channel, Receiver, Sender}, Arc, Mutex}};
 
 #[derive(Copy, Clone, Debug)]
 pub enum DutyCycle {
@@ -29,6 +25,13 @@ pub struct SampleWave<const COUNT: usize> {
     pub volume_samples: [f32; COUNT],
     // in hz
     pub frequency: f32,
+}
+
+// A wave made of floating point samples
+#[derive(Clone, Debug)]
+pub struct NoiseWave {
+    // 0 to 1 range
+    pub volume_samples: Arc<Mutex<VecDeque<f32>>>,
 }
 
 // SDL-specific implementation details below
@@ -102,6 +105,47 @@ impl<const COUNT: usize> sdl3::audio::AudioCallback<f32> for SampleGenerator<COU
     }
 }
 
+pub struct NoiseGenerator {
+    wave_inbox: Receiver<NoiseWave>,
+}
+
+impl sdl3::audio::AudioCallback<f32> for NoiseGenerator {
+    
+    fn callback(&mut self, out: &mut [f32]) {
+        // Check wave data for most recently posted value, otherwise use the cached value
+        let mut wave: Option<NoiseWave> = None;
+        loop { 
+            // chew through the queue until there's nothing left and break on the last good value
+            match self.wave_inbox.try_recv() {
+                Ok(new_wave) => wave = Some(new_wave),
+                Err(_) => break
+            };
+        };
+
+
+        match wave {
+            Some(noise_data) => {
+                let noise_unwrapped = noise_data.volume_samples.lock().unwrap();
+                let noise_slice = noise_unwrapped.as_slices().0;
+                let nose_slice = noise_unwrapped.as_slices().1;
+
+                // Through the power of being lazy, these should both be length 441
+                for idx in 0..out.iter_mut().len() {
+                    out[idx] = noise_slice[idx];
+                }
+            }
+            None => {
+                // Through the power of lacking talent and understanding of how to reconcile the mutex and non-mutex cases, I can repeat the loop code
+                //println!("{}", out.iter_mut().len());
+                for idx in 0..out.iter_mut().len() {
+                    out[idx] = 0.0;
+                }
+            }
+        }
+        
+    }
+}
+
 
 pub struct GbAudioSdl {
     audio_subsystem: sdl3::AudioSubsystem,
@@ -113,6 +157,8 @@ pub struct GbAudioSdl {
     channel_2: sdl3::audio::AudioStreamWithCallback<SquareGenerator>,
     channel_3_outbox: Sender<SampleWave<32>>,
     channel_3: sdl3::audio::AudioStreamWithCallback<SampleGenerator<32>>,
+    channel_4_outbox: Sender<NoiseWave>,
+    channel_4: sdl3::audio::AudioStreamWithCallback<NoiseGenerator>
 }
 
 impl GbAudioSdl {
@@ -161,6 +207,12 @@ impl GbAudioSdl {
         };
         let channel_3_stream = audio_subsystem.open_playback_stream_with_callback(&playback_device, &spec, channel_3_wave_generator).unwrap();
 
+        let (wave_4_outbox, wave_4_inbox) = channel();
+        let channel_4_wave_generator = NoiseGenerator {
+            wave_inbox: wave_4_inbox,
+        };
+        let channel_4_stream = audio_subsystem.open_playback_stream_with_callback(&playback_device, &spec, channel_4_wave_generator).unwrap();
+
         GbAudioSdl { 
             audio_subsystem,
             spec,
@@ -170,7 +222,9 @@ impl GbAudioSdl {
             channel_2_outbox: wave_2_outbox,
             channel_2: channel_2_stream,
             channel_3_outbox: wave_3_outbox,
-            channel_3: channel_3_stream
+            channel_3: channel_3_stream,
+            channel_4_outbox: wave_4_outbox,
+            channel_4: channel_4_stream
         }
     }
 
@@ -211,6 +265,18 @@ impl GbAudioSdl {
 
     pub fn stop_channel_3(&self) {
         self.channel_3.pause().unwrap();
+    }
+
+    pub fn start_channel_4(&mut self) {
+        self.channel_4.resume().unwrap();
+    }
+
+    pub fn update_channel_4(&mut self, wave: NoiseWave) {
+        self.channel_4_outbox.send(wave).unwrap();
+    }
+
+    pub fn stop_channel_4(&self) {
+        self.channel_4.pause().unwrap();
     }
 }
 

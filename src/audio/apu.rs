@@ -1,5 +1,5 @@
-use std::{cell::RefCell, ops::Add, rc::Rc};
-use crate::{audio::audio::SampleWave, memory_gb::{Address, Byte, MemoryMap, MemoryRegion, Word}};
+use std::{cell::RefCell, collections::VecDeque, ops::Add, rc::Rc, sync::{Arc, Mutex}};
+use crate::{apu_registers::LfsrWidth, audio::audio::{NoiseWave, SampleWave}, memory_gb::{Address, Byte, MemoryMap, MemoryRegion, Word}};
 
 use super::audio::{DutyCycle, SquareWave};
 
@@ -29,12 +29,23 @@ pub struct Apu<'a> {
     channel_3_wave_ram: [u8; 16],
     channel_3_active: bool,
 
+    channel_4_volume_current: u8,
+    channel_4_length_timer_current: u8,
+    channel_4_active: bool,
+
     divider_previous: u8,
     divider_counter: u32,
+
+    lsfr: Lfsr,
+    last_lsfr_count: u64,
+    noise_ring: Arc<Mutex<VecDeque<f32>>>,
 }
 
 impl<'a> Apu<'a> {
     pub fn new(memory_map: Rc<RefCell<MemoryMap<'a>>>) -> Apu<'a> {
+        let mut noise_ring: VecDeque<f32> = std::iter::repeat(0.0).take(441).collect();
+        noise_ring.make_contiguous();
+        let noise_ring_arc = Arc::new(Mutex::new(noise_ring));
         Apu {
             memory: memory_map,
             channel_1_volume_current: 0,
@@ -54,8 +65,16 @@ impl<'a> Apu<'a> {
             channel_3_wave_ram: [0; 16],
             channel_3_active: false,
 
+            channel_4_volume_current: 0,
+            channel_4_length_timer_current: 0,
+            channel_4_active: false,
+
             divider_previous: 0,
             divider_counter: 0,
+
+            lsfr: Lfsr::new(),
+            last_lsfr_count: 0,
+            noise_ring: noise_ring_arc,
         }
     }
 
@@ -186,6 +205,25 @@ impl<'a> Apu<'a> {
         let ch3_output_level = map.apu_state.channel_3_output_level();
         self.channel_3_volume_shift = if ch3_output_level == 0 { 4 } else { ch3_output_level - 1 };
         
+        // channel 4 trigger
+        let ch4_triggered = map.apu_state.ch4_to_trigger;
+        if ch4_triggered {
+            map.apu_state.ch4_to_trigger = false;
+        }
+
+        // refresh internal values with triggered values
+        if ch4_triggered {
+            // Reset the volume
+            let ch4_init_volume = map.apu_state.channel_4_initial_volume();
+            self.channel_4_volume_current = ch4_init_volume;
+            // Reset the length counter
+            if (self.channel_4_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_4_length_timer_current == 0) {
+                self.channel_4_length_timer_current = map.apu_state.channel_4_length_timer();
+            }
+            // Activate channel
+            self.channel_4_active = true;
+        }
+
         // do timed events when the apu divider counter triggers
         const DIV_ADDR: Address = 0xFF04;
         let current_divider = map.read::<Byte>(DIV_ADDR);
@@ -259,6 +297,13 @@ impl<'a> Apu<'a> {
                         self.channel_3_active = false;
                     }
                 }
+                let channel_4_length_timer_enabled = map.apu_state.channel_4_length_timer_enabled();
+                if channel_4_length_timer_enabled && (self.channel_4_length_timer_current < LENGTH_TIMER_EXPIRY) {
+                    self.channel_4_length_timer_current += 1;
+                    if self.channel_4_length_timer_current == LENGTH_TIMER_EXPIRY {
+                        self.channel_4_active = false;
+                    }
+                }
             }
 
             // Volume sweeps (every 8 * pace div-apu ticks)
@@ -280,6 +325,16 @@ impl<'a> Apu<'a> {
                     self.channel_2_volume_current += 1;
                 } else if !channel_2_volume_sweep_increasing && (self.channel_2_volume_current > 0) {
                     self.channel_2_volume_current -= 1;
+                }
+            }
+            // CH4
+            let channel_4_volume_sweep_pace = map.apu_state.channel_4_volume_sweep_pace();
+            let channel_4_volume_sweep_increasing = map.apu_state.channel_4_volume_sweep_increasing();
+            if (channel_4_volume_sweep_pace > 0) && (self.divider_counter % (channel_4_volume_sweep_pace as u32 * 8)) == 0 {
+                if channel_4_volume_sweep_increasing && (self.channel_4_volume_current < 0b1111) {
+                    self.channel_4_volume_current += 1;
+                } else if !channel_4_volume_sweep_increasing && (self.channel_4_volume_current > 0) {
+                    self.channel_4_volume_current -= 1;
                 }
             }
         }
@@ -383,12 +438,77 @@ impl<'a> Apu<'a> {
         }
     }
 
-    pub fn update_waves(&mut self) -> (SquareWave, SquareWave, SampleWave<32>) {
+    fn parse_channel_4(&mut self) -> NoiseWave {
+        let mut map = self.memory.borrow_mut();
+        const VOLUME_CAP: f32 = 0.05;
+
+        let volume: f32 = VOLUME_CAP * if !self.channel_4_active {
+            0.0
+        } 
+        else {
+            let vol = self.channel_4_volume_current as f32 / 15.0;
+            vol
+        };
+
+        // Update the noise buffer
+        while self.last_lsfr_count != map.apu_state.lfsr_counter {
+            let noise_value = self.lsfr.tick(map.apu_state.channel_4_lfsr_width());
+            // 95 is a magic number that is approximately 2^22 (dots per second) / 44100 (sampling rate)
+            // every one of these, update the noise ring buffer with the next lfsr value
+            // TODO: Low pass filter
+            let mut noise_ring_unwrapped = self.noise_ring.lock().unwrap();
+            if (self.last_lsfr_count % 95) == 0 {
+                
+                noise_ring_unwrapped.pop_front();
+                noise_ring_unwrapped.push_back(volume * (noise_value as f32));
+            }
+            noise_ring_unwrapped.make_contiguous();
+            self.last_lsfr_count = self.last_lsfr_count.wrapping_add(1);
+        }
+
+        NoiseWave { 
+            volume_samples: self.noise_ring.clone()
+        }
+    }
+
+    pub fn update_waves(&mut self) -> (SquareWave, SquareWave, SampleWave<32>, NoiseWave) {
         self.catchup_registers();
         return (
             self.parse_channel_1(),
             self.parse_channel_2(),
-            self.parse_channel_3()
+            self.parse_channel_3(),
+            self.parse_channel_4()
         )
+    }
+}
+
+struct Lfsr {
+    bits: u16,
+}
+
+impl Lfsr {
+    pub fn tick(&mut self, mode: LfsrWidth) -> u16 {
+        // xor the last 2 bits
+        let xnor_result = 0b1 & !((self.bits) ^ ((self.bits >> 1)));
+        // put the result in the 15th bit
+        self.bits = (self.bits & !(1 << 15)) | (xnor_result << 15);
+        // and also in the 7th bit if in short mode
+        if mode == LfsrWidth::Seven {
+            self.bits = (self.bits & !(1 << 7)) | (xnor_result << 7);
+        }
+        // nab the current 'volume multiplier'
+        let volume_multiplier = self.bits & 0b1;
+        // then shift everything right
+        self.bits = self.bits >> 1;
+
+        return volume_multiplier
+    }
+
+    pub fn clear(&mut self) {
+        self.bits = 0;
+    }
+
+    pub fn new() -> Lfsr {
+        Lfsr { bits: 0 }
     }
 }

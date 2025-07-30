@@ -1,11 +1,7 @@
 use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
-use crate::memory_gb::EndianTranslate;
 use crate::memory_gb::Word;
-use crate::memory_gb::MemoryRegion;
-use crate::memory_gb::MemoryUnit;
 
-const BIT_4_MASK: u8 = 1 << 4;
 const BIT_7_MASK: u8 = 1 << 7;
 
 // This data structure exists to encapsulate state changes driven by writing to / reading from APU registers
@@ -59,6 +55,20 @@ impl ApuRegisters {
         self.nr34
     }
 
+    // CH4 Registers
+    pub fn read_nr41(&self) -> Byte {
+        self.nr41
+    }
+    pub fn read_nr42(&self) -> Byte {
+        self.nr42
+    }
+    pub fn read_nr43(&self) -> Byte {
+        self.nr43
+    }
+    pub fn read_nr44(&self) -> Byte {
+        self.nr44
+    }
+
     // Others
     pub fn read_nr52(&self) -> Byte {
         self.nr52
@@ -71,7 +81,6 @@ impl ApuRegisters {
     }
     pub fn write_nr11(&mut self, value: Byte) {
         self.nr11 = value;
-        self.ch1_length_timer_to_update = true;
     }
     pub fn write_nr12(&mut self, value: Byte) {
         self.nr12 = value;
@@ -89,7 +98,6 @@ impl ApuRegisters {
     // CH2 Registers
     pub fn write_nr21(&mut self, value: Byte) {
         self.nr21 = value;
-        self.ch2_length_timer_to_update = true;
     }
     pub fn write_nr22(&mut self, value: Byte) {
         self.nr22 = value;
@@ -110,7 +118,6 @@ impl ApuRegisters {
     }
     pub fn write_nr31(&mut self, value: Byte) {
         self.nr31 = value;
-        self.ch3_length_timer_to_update = true;
     }
     pub fn write_nr32(&mut self, value: Byte) {
         self.nr32 = value;
@@ -123,6 +130,21 @@ impl ApuRegisters {
         self.nr34 = value;
         self.ch3_to_trigger = (BIT_7_MASK & value) > 0;
         self.ch3_period_to_update = true;
+    }
+
+    // CH4 Registers
+    pub fn write_nr41(&mut self, value: Byte) {
+        self.nr41 = value;
+    }
+    pub fn write_nr42(&mut self, value: Byte) {
+        self.nr42 = value;
+    }
+    pub fn write_nr43(&mut self, value: Byte) {
+        self.nr43 = value;
+    }
+    pub fn write_nr44(&mut self, value: Byte) {
+        self.nr44 = value;
+        self.ch4_to_trigger = (BIT_7_MASK & value) > 0;
     }
 
     // Others
@@ -219,6 +241,48 @@ impl ApuRegisters {
         (self.nr34 & (1 << 6)) > 0
     }
 
+    // Channel 4
+    pub fn tick_lfsr(&mut self) -> () {
+        self.lfsr_counter = self.lfsr_counter.wrapping_add(1);
+    }
+
+    pub fn channel_4_length_timer(&self) -> u8 {
+        self.nr41 & 0x3F
+    }
+
+    pub fn channel_4_initial_volume(&self) -> u8 {
+        self.nr42 >> 4
+    }
+
+    pub fn channel_4_volume_sweep_pace(&self) -> u8 {
+        self.nr42 & 0b111
+    }
+
+    pub fn channel_4_volume_sweep_increasing(&self) -> bool {
+        (self.nr42 & 0b1000) > 0
+    }
+
+    pub fn channel_4_clock_shift(&self) -> u8 {
+        self.nr43 >> 4
+    }
+
+    pub fn channel_4_lfsr_width(&self) -> LfsrWidth {
+        if (self.nr43 & 0b1000) > 0 {
+            LfsrWidth::Seven
+        }
+        else {
+            LfsrWidth::Fifteen
+        }
+    }
+
+    pub fn channel_4_clock_divider(&self) -> u8 {
+        self.nr43 & 0b111
+    }
+
+    pub fn channel_4_length_timer_enabled(&self) -> bool {
+        (self.nr44 & (1 << 6)) > 0
+    }
+
     // We can load this with zeroes, cpu init handles populating these with post-boot values
     pub fn new() -> ApuRegisters {
         ApuRegisters {
@@ -236,18 +300,27 @@ impl ApuRegisters {
             nr32: 0,
             nr33: 0,
             nr34: 0,
+            nr41: 0,
+            nr42: 0,
+            nr43: 0,
+            nr44: 0,
             nr52: 0,
             ch1_to_trigger: false,
             ch2_to_trigger: false,
             ch3_to_trigger: false,
+            ch4_to_trigger: false,
             ch1_period_to_update: false,
             ch2_period_to_update: false,
             ch3_period_to_update: false,
-            ch1_length_timer_to_update: false,
-            ch2_length_timer_to_update: false,
-            ch3_length_timer_to_update: false,
+            lfsr_counter: 0,
         }
     }
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum LfsrWidth {
+    Fifteen,
+    Seven,
 }
 
 pub struct ApuRegisters {
@@ -265,14 +338,17 @@ pub struct ApuRegisters {
     nr32: Byte,
     nr33: Byte,
     nr34: Byte,
+    nr41: Byte,
+    nr42: Byte,
+    nr43: Byte,
+    nr44: Byte,
     nr52: Byte,
     pub ch1_to_trigger: bool,
     pub ch2_to_trigger: bool,
     pub ch3_to_trigger: bool,
+    pub ch4_to_trigger: bool,
     pub ch1_period_to_update: bool,
     pub ch2_period_to_update: bool,
     pub ch3_period_to_update: bool,
-    pub ch1_length_timer_to_update: bool,
-    pub ch2_length_timer_to_update: bool,
-    pub ch3_length_timer_to_update: bool,
+    pub lfsr_counter: u64,
 }

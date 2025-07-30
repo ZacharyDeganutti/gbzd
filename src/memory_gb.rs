@@ -296,6 +296,18 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             else if address == 0xFF1E {
                 T::promote(self.apu_state.read_nr34())
             }
+            else if address == 0xFF20 {
+                T::promote(self.apu_state.read_nr41())
+            }
+            else if address == 0xFF21 {
+                T::promote(self.apu_state.read_nr42())
+            }
+            else if address == 0xFF22 {
+                T::promote(self.apu_state.read_nr43())
+            }
+            else if address == 0xFF23 {
+                T::promote(self.apu_state.read_nr44())
+            }
             else if address == 0xFF26 {
                 T::promote(self.apu_state.read_nr52())
             }
@@ -333,7 +345,6 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
     }
 
     fn write<T: MemoryUnit>(&mut self, value: T, address: Address) -> () {
-        const BIT_7_MASK: u8 = 0x80;
         let _address = address as usize;
         if _address == IE_START {
             self.ie.write(value, address)
@@ -414,6 +425,18 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             }
             else if address == 0xFF1E {
                 self.apu_state.write_nr34(value.demote());
+            }
+            else if address == 0xFF20 {
+                self.apu_state.write_nr41(value.demote());
+            }
+            else if address == 0xFF21 {
+                self.apu_state.write_nr42(value.demote());
+            }
+            else if address == 0xFF22 {
+                self.apu_state.write_nr43(value.demote());
+            }
+            else if address == 0xFF23 {
+                self.apu_state.write_nr44(value.demote());
             }
             else if address == 0xFF26 {
                 self.apu_state.write_nr52(value.demote());

@@ -530,11 +530,14 @@ impl<'a> Cpu<'a> {
 
     fn tick_timer(&mut self) -> () {
         let mut mem = self.memory.borrow_mut();
+        // Tick system clock and kick the interrupt flag if appropriate
         let fire_interrupt_ready_status = mem.timer.tick();
         if fire_interrupt_ready_status {
             let if_value: Byte = mem.io_registers.read(0xFF0F);
             mem.io_registers.write(if_value | 0x4, 0xFF0F);
         }
+        // Tick APU noise channel clock
+        mem.apu_state.tick_lfsr(); 
     }
 
     pub fn run(&mut self) -> u8 {

@@ -67,6 +67,7 @@ fn main() {
     audio_player.start_channel_1(default_square_wave);
     audio_player.start_channel_2(default_square_wave);
     audio_player.start_channel_3(default_sample_wave);
+    audio_player.start_channel_4();
 
     let mut display = DisplayMiniFB::new();
 
@@ -96,10 +97,11 @@ fn main() {
 
             // Update APU after CPU because it operates at a finer dot granularity.
             // CPU/PPU/APU should provide the illusion of operating in parallel
-            let (ch_1_wave, ch_2_wave, ch_3_wave) = apu.update_waves();
+            let (ch_1_wave, ch_2_wave, ch_3_wave, ch_4_wave) = apu.update_waves();
             audio_player.update_channel_1(ch_1_wave);
             audio_player.update_channel_2(ch_2_wave);
             audio_player.update_channel_3(ch_3_wave);
+            audio_player.update_channel_4(ch_4_wave);
         }
         else {
             if cpu_locked {

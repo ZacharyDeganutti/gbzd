@@ -3,7 +3,8 @@ use crate::{apu_registers::LfsrWidth, audio::audio::{NoiseWave, SampleWave}, mem
 
 use super::audio::{DutyCycle, SquareWave};
 
-// Dots per second = 2^22
+const SYSTEM_FREQUENCY: u64 = 2_u64.pow(22);
+const LFSR_BASE_FREQUENCY: u64 = 2_u64.pow(18);
 const DOTS_PER_LENGTH_TICK: u32 = 2_u32.pow(14); // 256 hz tick
 const DOTS_PER_SWEEP_TICK: u32 = 2_u32.pow(15); // 128 hz tick
 const DOTS_PER_VOLUME_ENVELOPE_TICK: u32 = 2_u32.pow(16); // 64 hz tick
@@ -36,8 +37,8 @@ pub struct Apu<'a> {
     divider_previous: u8,
     divider_counter: u32,
 
-    lsfr: Lfsr,
-    last_lsfr_count: u64,
+    lfsr: Lfsr,
+    last_lfsr_count: u64,
     noise_ring: Arc<Mutex<VecDeque<f32>>>,
 }
 
@@ -72,8 +73,8 @@ impl<'a> Apu<'a> {
             divider_previous: 0,
             divider_counter: 0,
 
-            lsfr: Lfsr::new(),
-            last_lsfr_count: 0,
+            lfsr: Lfsr::new(),
+            last_lfsr_count: 0,
             noise_ring: noise_ring_arc,
         }
     }
@@ -220,6 +221,8 @@ impl<'a> Apu<'a> {
             if (self.channel_4_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_4_length_timer_current == 0) {
                 self.channel_4_length_timer_current = map.apu_state.channel_4_length_timer();
             }
+            // Reset the LFSR bits
+            self.lfsr.clear();
             // Activate channel
             self.channel_4_active = true;
         }
@@ -451,19 +454,28 @@ impl<'a> Apu<'a> {
         };
 
         // Update the noise buffer
-        while self.last_lsfr_count != map.apu_state.lfsr_counter {
-            let noise_value = self.lsfr.tick(map.apu_state.channel_4_lfsr_width());
+        while self.last_lfsr_count != map.apu_state.lfsr_counter {
+            // The fastest tick rate for this 0 shifted lfsr is 2^18 Hz
+            // The system clock is 2^22 Hz, so the base number of dots elapsed per tick is 2^4 (16)
+            // 2^22 / (2^18 / (divider * 2^shift))
+            let clock_shift = map.apu_state.channel_4_clock_shift() as u32;
+            let clock_divider = map.apu_state.channel_4_clock_divider();
+            let clock_divider_adjusted = if clock_divider == 0 { 0.5 } else { clock_divider as f32 };
+            let tick_resolution: u64 = SYSTEM_FREQUENCY / (LFSR_BASE_FREQUENCY / ((clock_divider_adjusted * (2_u32.pow(clock_shift)) as f32).round() as u64));
+            if (self.last_lfsr_count % tick_resolution) == 0 {
+                self.lfsr.tick(map.apu_state.channel_4_lfsr_width());
+            }
+            let noise_value = self.lfsr.most_recent_state();
             // 95 is a magic number that is approximately 2^22 (dots per second) / 44100 (sampling rate)
             // every one of these, update the noise ring buffer with the next lfsr value
-            // TODO: Low pass filter
+            // TODO: Low pass filter + account for clock shift and other stuff
             let mut noise_ring_unwrapped = self.noise_ring.lock().unwrap();
-            if (self.last_lsfr_count % 95) == 0 {
-                
+            if (self.last_lfsr_count % 95) == 0 {
                 noise_ring_unwrapped.pop_front();
                 noise_ring_unwrapped.push_back(volume * (noise_value as f32));
             }
             noise_ring_unwrapped.make_contiguous();
-            self.last_lsfr_count = self.last_lsfr_count.wrapping_add(1);
+            self.last_lfsr_count = self.last_lfsr_count.wrapping_add(1);
         }
 
         NoiseWave { 
@@ -484,6 +496,7 @@ impl<'a> Apu<'a> {
 
 struct Lfsr {
     bits: u16,
+    last_shifted_bit: u8,
 }
 
 impl Lfsr {
@@ -501,7 +514,12 @@ impl Lfsr {
         // then shift everything right
         self.bits = self.bits >> 1;
 
+        self.last_shifted_bit = volume_multiplier as u8;
         return volume_multiplier
+    }
+
+    pub fn most_recent_state(&self) -> u8 {
+        self.last_shifted_bit
     }
 
     pub fn clear(&mut self) {
@@ -509,6 +527,9 @@ impl Lfsr {
     }
 
     pub fn new() -> Lfsr {
-        Lfsr { bits: 0 }
+        Lfsr { 
+            bits: 0,
+            last_shifted_bit: 0,
+        }
     }
 }

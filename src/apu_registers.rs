@@ -1,4 +1,3 @@
-use crate::memory_gb::Address;
 use crate::memory_gb::Byte;
 use crate::memory_gb::Word;
 

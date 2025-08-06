@@ -1,5 +1,5 @@
 use sdl3;
-use std::{collections::VecDeque, rc::Rc, sync::{mpsc::{channel, Receiver, Sender}, Arc, Mutex}};
+use std::{collections::VecDeque, sync::{mpsc::{channel, Receiver, Sender}, Arc, Mutex}};
 
 #[derive(Copy, Clone, Debug)]
 pub enum DutyCycle {

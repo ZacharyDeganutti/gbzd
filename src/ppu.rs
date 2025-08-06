@@ -254,23 +254,18 @@ impl<'a> Ppu<'a> {
         }
         
         let dots_spent = match self.current_mode {
+            // Do chunks of the current mode on any given PPU iteration
             RenderMode::OAMScan => {
-                // Scan the whole OAM in one shot since coroutines aren't 'real' yet
-                // and I really don't want to implement that without those unless I really have to
                 self.oam_scan_results.clear();
                 
                 const OAM_DOT_GRANULARITY: u32 = OAM_SCAN_TIME/40;
                 self.current_dot += OAM_DOT_GRANULARITY;
                 if (self.current_dot % DOTS_PER_LINE) >= OAM_SCAN_TIME {
                     self.oam_scan_results = self.scan_oam();
-                    // println!("oam_scan_results length {}", self.oam_scan_results.len());
                 }
                 (OAM_DOT_GRANULARITY) as i16
             }
             RenderMode::PixelDraw => {
-                // Actually granular timing is for nerds, let's just rip out whole modes at once
-                // This could certainly make things funky within any line,
-                // but SURELY this should be good enough and things will probably mostly shake out
                 const PIXEL_DRAW_GRANULARITY: u32 = PIXEL_DRAW_TIME/4;
                 let line_number = self.current_dot / DOTS_PER_LINE;
                 self.current_dot += PIXEL_DRAW_GRANULARITY;
@@ -290,7 +285,6 @@ impl<'a> Ppu<'a> {
             RenderMode::VBlank => {
                 if self.current_dot == DOT_MAX - DOTS_PER_LINE {
                     self.swap_buffers();
-                    //self.output_screen();
                     self.internal_window_line_counter = 0;
                 }
                 const VBLANK_TIME: u32 = DOTS_PER_LINE/19;

@@ -1,15 +1,10 @@
 use std::{cell::RefCell, collections::VecDeque, ops::Add, rc::Rc, sync::{Arc, Mutex}};
-use crate::{apu_registers::LfsrWidth, audio::audio::{NoiseWave, SampleWave}, memory_gb::{Address, Byte, MemoryMap, MemoryRegion, Word}};
+use crate::{apu_registers::LfsrWidth, audio::audio::{NoiseWave, SampleWave}, memory_gb::{Address, Byte, MemoryMap, MemoryRegion}};
 
 use super::audio::{DutyCycle, SquareWave};
 
 const SYSTEM_FREQUENCY: u64 = 2_u64.pow(22);
 const LFSR_BASE_FREQUENCY: u64 = 2_u64.pow(18);
-const DOTS_PER_LENGTH_TICK: u32 = 2_u32.pow(14); // 256 hz tick
-const DOTS_PER_SWEEP_TICK: u32 = 2_u32.pow(15); // 128 hz tick
-const DOTS_PER_VOLUME_ENVELOPE_TICK: u32 = 2_u32.pow(16); // 64 hz tick
-const DOTS_MODULO: u32 = DOTS_PER_VOLUME_ENVELOPE_TICK * 64;
-const DOT_DURATION: f32 = 1.0 / 2_u32.pow(22) as f32;
 
 pub struct Apu<'a> {
     memory: Rc<RefCell<MemoryMap<'a>>>,
@@ -84,13 +79,10 @@ impl<'a> Apu<'a> {
         let mut map = self.memory.borrow_mut();
 
         const BIT_4_MASK: u8 = 1 << 4;
-        const BIT_7_MASK: u8 = 1 << 7;
 
         // handle global stuff
-        const NR52_ADDR: Address = 0xFF26;
-        let nr52_contents = map.read::<Byte>(NR52_ADDR);
         // clumsy audio disable handling. todo: make it clear the registers, also probably handle all of it in the memory map with a special handler
-        if (nr52_contents & BIT_7_MASK) == 0 {
+        if !map.apu_state.master_audio_is_enabled() {
             self.channel_1_active = false;
             self.channel_2_active = false;
             self.channel_3_active = false;
@@ -442,7 +434,7 @@ impl<'a> Apu<'a> {
     }
 
     fn parse_channel_4(&mut self) -> NoiseWave {
-        let mut map = self.memory.borrow_mut();
+        let map = self.memory.borrow_mut();
         const VOLUME_CAP: f32 = 0.05;
 
         let volume: f32 = VOLUME_CAP * if !self.channel_4_active {

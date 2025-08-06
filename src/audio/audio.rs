@@ -127,16 +127,17 @@ impl sdl3::audio::AudioCallback<f32> for NoiseGenerator {
             Some(noise_data) => {
                 let noise_unwrapped = noise_data.volume_samples.lock().unwrap();
                 let noise_slice = noise_unwrapped.as_slices().0;
-                let nose_slice = noise_unwrapped.as_slices().1;
+                let noise_slice_2 = noise_unwrapped.as_slices().1;
 
                 // Through the power of being lazy, these should both be length 441
-                for idx in 0..out.iter_mut().len() {
+                for idx in 0..noise_slice.len() {
                     out[idx] = noise_slice[idx];
+                }
+                for idx in 0..noise_slice_2.len() {
+                    out[idx + noise_slice.len()] = noise_slice_2[idx];
                 }
             }
             None => {
-                // Through the power of lacking talent and understanding of how to reconcile the mutex and non-mutex cases, I can repeat the loop code
-                //println!("{}", out.iter_mut().len());
                 for idx in 0..out.iter_mut().len() {
                     out[idx] = 0.0;
                 }

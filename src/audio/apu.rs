@@ -474,7 +474,6 @@ impl<'a> Apu<'a> {
                 noise_ring_unwrapped.pop_front();
                 noise_ring_unwrapped.push_back(volume * (noise_value as f32));
             }
-            noise_ring_unwrapped.make_contiguous();
             self.last_lfsr_count = self.last_lfsr_count.wrapping_add(1);
         }
 

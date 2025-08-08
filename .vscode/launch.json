@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["roms/yellow_patched.gb"],
+            "args": ["roms/panda.gb"],
             "cwd": "${workspaceFolder}"
         },
         {

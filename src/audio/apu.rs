@@ -274,28 +274,28 @@ impl<'a> Apu<'a> {
                 let channel_1_length_timer_enabled = map.apu_state.channel_1_length_timer_enabled();
                 if channel_1_length_timer_enabled && (self.channel_1_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_1_length_timer_current += 1;
-                    if self.channel_1_length_timer_current == LENGTH_TIMER_EXPIRY {
+                    if self.channel_1_length_timer_current >= LENGTH_TIMER_EXPIRY {
                         self.channel_1_active = false;
                     }
                 }
                 let channel_2_length_timer_enabled = map.apu_state.channel_2_length_timer_enabled();
                 if channel_2_length_timer_enabled && (self.channel_2_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_2_length_timer_current += 1;
-                    if self.channel_2_length_timer_current == LENGTH_TIMER_EXPIRY {
+                    if self.channel_2_length_timer_current >= LENGTH_TIMER_EXPIRY {
                         self.channel_2_active = false;
                     }
                 }
                 let channel_3_length_timer_enabled = map.apu_state.channel_3_length_timer_enabled();
                 if channel_3_length_timer_enabled && (self.channel_3_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_3_length_timer_current += 1;
-                    if self.channel_3_length_timer_current == LENGTH_TIMER_EXPIRY {
+                    if self.channel_3_length_timer_current >= LENGTH_TIMER_EXPIRY {
                         self.channel_3_active = false;
                     }
                 }
                 let channel_4_length_timer_enabled = map.apu_state.channel_4_length_timer_enabled();
                 if channel_4_length_timer_enabled && (self.channel_4_length_timer_current < LENGTH_TIMER_EXPIRY) {
                     self.channel_4_length_timer_current += 1;
-                    if self.channel_4_length_timer_current == LENGTH_TIMER_EXPIRY {
+                    if self.channel_4_length_timer_current >= LENGTH_TIMER_EXPIRY {
                         self.channel_4_active = false;
                     }
                 }

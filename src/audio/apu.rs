@@ -90,18 +90,18 @@ impl<'a> Apu<'a> {
             return
         }
         
-        // Check individual channels to see if they got a shutdown signal since the last time this was run
-        if map.apu_state.channel_1_dac_was_shut_off() {
+        // Check individual channels to see if their DACs are off
+        if !map.apu_state.channel_1_dac_enabled() {
             self.channel_1_active = false;
         }
 
-        if map.apu_state.channel_2_dac_was_shut_off() {
+        if !map.apu_state.channel_2_dac_enabled() {
             self.channel_2_active = false;
         }
 
         self.channel_3_active = map.apu_state.channel_3_dac_enabled();
 
-        if map.apu_state.channel_4_dac_was_shut_off() {
+        if !map.apu_state.channel_4_dac_enabled() {
             self.channel_4_active = false;
         }
 
@@ -127,8 +127,8 @@ impl<'a> Apu<'a> {
             }
             // Reset sweep values
             self.channel_1_sweep_pace_current = map.apu_state.channel_1_sweep_pace();
-            // Activate channel
-            self.channel_1_active = true;
+            // Activate channel if DAC is alive
+            self.channel_1_active = map.apu_state.channel_1_dac_enabled();
             // println!("TRIGGER CH1");
         }
 
@@ -156,8 +156,8 @@ impl<'a> Apu<'a> {
             if (self.channel_2_length_timer_current >= LENGTH_TIMER_EXPIRY) || (self.channel_2_length_timer_current == 0) {
                 self.channel_2_length_timer_current = map.apu_state.channel_2_length_timer();
             }
-            // Activate channel
-            self.channel_2_active = true;
+            // Activate channel if DAC is alive
+            self.channel_2_active = map.apu_state.channel_2_dac_enabled();
         }
 
         // update ch2 period if it was overwritten
@@ -231,8 +231,8 @@ impl<'a> Apu<'a> {
             }
             // Reset the LFSR bits
             self.lfsr.clear();
-            // Activate channel
-            self.channel_4_active = true;
+            // Activate channel if DAC is alive
+            self.channel_4_active = map.apu_state.channel_4_dac_enabled();
         }
 
         // do timed events when the apu divider counter triggers

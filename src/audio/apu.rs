@@ -1,5 +1,5 @@
 use std::{cell::RefCell, collections::VecDeque, ops::Add, rc::Rc, sync::{Arc, Mutex}};
-use crate::{apu_registers::LfsrWidth, audio::audio::{NoiseWave, SampleWave}, memory_gb::{Address, Byte, MemoryMap, MemoryRegion}};
+use crate::{apu_registers::LfsrWidth, audio::audio::{AudioDirection, NoiseWave, SampleWave}, memory_gb::{Address, Byte, MemoryMap, MemoryRegion}};
 
 use super::audio::{DutyCycle, SquareWave};
 
@@ -86,6 +86,7 @@ impl<'a> Apu<'a> {
             self.channel_1_active = false;
             self.channel_2_active = false;
             self.channel_3_active = false;
+            self.channel_4_active = false;
             return
         }
 
@@ -333,6 +334,18 @@ impl<'a> Apu<'a> {
                 }
             }
         }
+
+        // Update status report on audio master control status bits
+        map.apu_state.update_nr52_channel_status(self.channel_1_active, self.channel_2_active, self.channel_3_active, self.channel_4_active);
+    }
+
+    fn mix_volume_multiplier(left_multiplier: f32, right_multiplier: f32, direction: AudioDirection) -> f32 {
+        match direction {
+            AudioDirection::Left => { left_multiplier },
+            AudioDirection::Right => { right_multiplier },
+            AudioDirection::Center => { (left_multiplier + right_multiplier) / 2.0 },
+            AudioDirection::None => { 0.0 }
+        }
     }
 
     fn parse_channel_1(&self) -> SquareWave {
@@ -354,8 +367,10 @@ impl<'a> Apu<'a> {
         let frequency = 131072.0 / (2048.0 - self.channel_1_period_current as f32);
 
         const VOLUME_CAP: f32 = 0.05;
+
+        let channel_volume_multiplier = Self::mix_volume_multiplier(mem.apu_state.left_volume_multiplier(), mem.apu_state.right_volume_multiplier(), mem.apu_state.channel_1_audio_direction());
         // Mute if the length timer is maxed or the channel is off
-        let volume: f32 = VOLUME_CAP * if !self.channel_1_active {
+        let volume: f32 = VOLUME_CAP * channel_volume_multiplier * if !self.channel_1_active {
             0.0
         } 
         else {
@@ -388,8 +403,9 @@ impl<'a> Apu<'a> {
 
         let frequency = 131072.0 / (2048.0 - self.channel_2_period_current as f32);
 
+        let channel_volume_multiplier = Self::mix_volume_multiplier(mem.apu_state.left_volume_multiplier(), mem.apu_state.right_volume_multiplier(), mem.apu_state.channel_2_audio_direction());
         const VOLUME_CAP: f32 = 0.05;
-        let volume: f32 = VOLUME_CAP * if !self.channel_2_active {
+        let volume: f32 = VOLUME_CAP * channel_volume_multiplier * if !self.channel_2_active {
             0.0
         } 
         else {
@@ -405,6 +421,8 @@ impl<'a> Apu<'a> {
     }
 
     fn parse_channel_3(&self) -> SampleWave<32> {
+        let mem = self.memory.borrow_mut();
+
         let frequency = 65536.0 / (2048.0 - self.channel_3_period_current as f32);
         let volume_shift = if self.channel_3_active { self.channel_3_volume_shift } else { 4 };
         
@@ -412,6 +430,7 @@ impl<'a> Apu<'a> {
 
         let mut volume_samples: [f32; SAMPLE_COUNT] = [0.0; SAMPLE_COUNT];
 
+        let channel_volume_multiplier = Self::mix_volume_multiplier(mem.apu_state.left_volume_multiplier(), mem.apu_state.right_volume_multiplier(), mem.apu_state.channel_3_audio_direction());
         const VOLUME_CAP: f32 = 0.05;
 
         for byte_offset in 0..self.channel_3_wave_ram.len() {
@@ -423,8 +442,8 @@ impl<'a> Apu<'a> {
             let upper_f32_sample = (upper_sample as f32 - ((0xF >> volume_shift) as f32 / 2.0)) / 7.5;
             let lower_f32_sample = (lower_sample as f32 - ((0xF >> volume_shift) as f32 / 2.0)) / 7.5;
 
-            volume_samples[index] = VOLUME_CAP * upper_f32_sample;
-            volume_samples[index + 1] = VOLUME_CAP * lower_f32_sample;
+            volume_samples[index] = VOLUME_CAP * channel_volume_multiplier * upper_f32_sample;
+            volume_samples[index + 1] = VOLUME_CAP * channel_volume_multiplier * lower_f32_sample;
         }
 
         SampleWave { 
@@ -435,9 +454,11 @@ impl<'a> Apu<'a> {
 
     fn parse_channel_4(&mut self) -> NoiseWave {
         let map = self.memory.borrow_mut();
+
+        let channel_volume_multiplier = Self::mix_volume_multiplier(map.apu_state.left_volume_multiplier(), map.apu_state.right_volume_multiplier(), map.apu_state.channel_4_audio_direction());
         const VOLUME_CAP: f32 = 0.05;
 
-        let volume: f32 = VOLUME_CAP * if !self.channel_4_active {
+        let volume: f32 = VOLUME_CAP * channel_volume_multiplier * if !self.channel_4_active {
             0.0
         } 
         else {

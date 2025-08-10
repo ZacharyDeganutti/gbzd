@@ -1,4 +1,6 @@
+use crate::audio::audio::AudioDirection;
 use crate::memory_gb::Byte;
+use crate::memory_gb::MemoryUnit;
 use crate::memory_gb::Word;
 
 const BIT_7_MASK: u8 = 1 << 7;
@@ -69,6 +71,12 @@ impl ApuRegisters {
     }
 
     // Others
+    pub fn read_nr50(&self) -> Byte {
+        self.nr50
+    }
+    pub fn read_nr51(&self) -> Byte {
+        self.nr51
+    }
     pub fn read_nr52(&self) -> Byte {
         self.nr52
     }
@@ -147,14 +155,57 @@ impl ApuRegisters {
     }
 
     // Others
+    pub fn write_nr50(&mut self, value: Byte) {
+        self.nr50 = value.demote();
+    }
+
+    pub fn write_nr51(&mut self, value: Byte) {
+        self.nr51 = value.demote();
+    }
+
     pub fn write_nr52(&mut self, value: Byte) {
-        self.nr52 = value;
+        // Channel status bits are read only
+        self.nr52 = value & 0x80;
+    }
+
+    pub fn update_nr52_channel_status(&mut self, ch1_on: bool, ch2_on: bool, ch3_on: bool, ch4_on: bool) {
+        let bits = (ch1_on as u8) 
+            | ((ch2_on as u8) << 1)
+            | ((ch3_on as u8) << 2)
+            | ((ch4_on as u8) << 3);
+        
+        self.nr52 = (self.nr52 & 0xF0) | bits;
     }
 
     // Convenience methods for readability of APU implementation
     // General
     pub fn master_audio_is_enabled(&self) -> bool {
         (self.nr52 & BIT_7_MASK) > 0
+    }
+
+    // Left output, ~0-1 range. Value is always greater than 0
+    pub fn left_volume_multiplier(&self) -> f32 {
+        let raw_volume = ((self.nr52 & 0x70) >> 4) + 1;
+        raw_volume as f32 / 8.0
+    } 
+
+    // Right output, ~0-1 range. Value is always greater than 0
+    pub fn right_volume_multiplier(&self) -> f32 {
+        let raw_volume = (self.nr52 & 0x7) + 1;
+        raw_volume as f32 / 8.0
+    } 
+
+    // Generic helpers
+    fn audio_direction(register: u8, half_mask: u8) -> AudioDirection {
+        let upper_mask = half_mask << 4;
+        let lower_mask = half_mask;
+        let mask = upper_mask | lower_mask;
+        match register & mask {
+            x if x == upper_mask => AudioDirection::Left,
+            x if x == lower_mask => AudioDirection::Right,
+            x if x == mask => AudioDirection::Center,
+            _ => AudioDirection::None
+        }
     }
 
     // Channel 1
@@ -194,6 +245,10 @@ impl ApuRegisters {
         (self.nr14 & (1 << 6)) > 0
     }
 
+    pub fn channel_1_audio_direction(&self) -> AudioDirection {
+        Self::audio_direction(self.nr51, 0x1)
+    }
+
     // Channel 2
     pub fn channel_2_length_timer(&self) -> u8 {
         self.nr21 & 0x3F
@@ -219,6 +274,10 @@ impl ApuRegisters {
         (self.nr24 & (1 << 6)) > 0
     }
 
+    pub fn channel_2_audio_direction(&self) -> AudioDirection {
+        Self::audio_direction(self.nr51, 0x2)
+    }
+
     // Channel 3
     pub fn channel_3_dac_enabled(&self) -> bool {
         (self.nr30 & BIT_7_MASK) > 0
@@ -238,6 +297,10 @@ impl ApuRegisters {
 
     pub fn channel_3_length_timer_enabled(&self) -> bool {
         (self.nr34 & (1 << 6)) > 0
+    }
+
+    pub fn channel_3_audio_direction(&self) -> AudioDirection {
+        Self::audio_direction(self.nr51, 0x4)
     }
 
     // Channel 4
@@ -282,6 +345,10 @@ impl ApuRegisters {
         (self.nr44 & (1 << 6)) > 0
     }
 
+    pub fn channel_4_audio_direction(&self) -> AudioDirection {
+        Self::audio_direction(self.nr51, 0x8)
+    }
+
     // We can load this with zeroes, cpu init handles populating these with post-boot values
     pub fn new() -> ApuRegisters {
         ApuRegisters {
@@ -303,6 +370,8 @@ impl ApuRegisters {
             nr42: 0,
             nr43: 0,
             nr44: 0,
+            nr50: 0,
+            nr51: 0,
             nr52: 0,
             ch1_to_trigger: false,
             ch2_to_trigger: false,
@@ -341,6 +410,8 @@ pub struct ApuRegisters {
     nr42: Byte,
     nr43: Byte,
     nr44: Byte,
+    nr50: Byte,
+    nr51: Byte,
     nr52: Byte,
     pub ch1_to_trigger: bool,
     pub ch2_to_trigger: bool,

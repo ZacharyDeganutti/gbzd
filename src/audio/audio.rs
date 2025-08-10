@@ -2,6 +2,14 @@ use sdl3;
 use std::{collections::VecDeque, sync::{mpsc::{channel, Receiver, Sender}, Arc, Mutex}};
 
 #[derive(Copy, Clone, Debug)]
+pub enum AudioDirection {
+    Left,
+    Right,
+    Center,
+    None
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum DutyCycle {
     Eighth,
     Quarter,

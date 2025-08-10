@@ -28,6 +28,7 @@ use crate::ppu::*;
 use crate::input::*;
 
 const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
+//const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740 / 2);
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();

@@ -308,6 +308,12 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             else if address == 0xFF23 {
                 T::promote(self.apu_state.read_nr44())
             }
+            else if address == 0xFF24 {
+                T::promote(self.apu_state.read_nr50())
+            }
+            else if address == 0xFF25 {
+                T::promote(self.apu_state.read_nr51())
+            }
             else if address == 0xFF26 {
                 T::promote(self.apu_state.read_nr52())
             }
@@ -437,6 +443,12 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             }
             else if address == 0xFF23 {
                 self.apu_state.write_nr44(value.demote());
+            }
+            else if address == 0xFF24 {
+                self.apu_state.write_nr50(value.demote());
+            }
+            else if address == 0xFF25 {
+                self.apu_state.write_nr51(value.demote());
             }
             else if address == 0xFF26 {
                 self.apu_state.write_nr52(value.demote());

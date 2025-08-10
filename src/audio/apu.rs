@@ -89,6 +89,21 @@ impl<'a> Apu<'a> {
             self.channel_4_active = false;
             return
         }
+        
+        // Check individual channels to see if they got a shutdown signal since the last time this was run
+        if map.apu_state.channel_1_dac_was_shut_off() {
+            self.channel_1_active = false;
+        }
+
+        if map.apu_state.channel_2_dac_was_shut_off() {
+            self.channel_2_active = false;
+        }
+
+        self.channel_3_active = map.apu_state.channel_3_dac_enabled();
+
+        if map.apu_state.channel_4_dac_was_shut_off() {
+            self.channel_4_active = false;
+        }
 
         // handle trigger events
         // channel 1 trigger

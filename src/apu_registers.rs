@@ -90,6 +90,10 @@ impl ApuRegisters {
         self.nr11 = value;
     }
     pub fn write_nr12(&mut self, value: Byte) {
+        // If top 5 bits are all 0, the DAC is to be turned off
+        if (!value) >> 3 == 0x1F {
+            self.ch1_dac_recently_turned_off = true;
+        }
         self.nr12 = value;
     }
     pub fn write_nr13(&mut self, value: Byte) {
@@ -107,6 +111,10 @@ impl ApuRegisters {
         self.nr21 = value;
     }
     pub fn write_nr22(&mut self, value: Byte) {
+        // If top 5 bits are all 0, the DAC is to be turned off
+        if (!value) >> 3 == 0x1F {
+            self.ch2_dac_recently_turned_off = true;
+        }
         self.nr22 = value;
     }
     pub fn write_nr23(&mut self, value: Byte) {
@@ -144,6 +152,10 @@ impl ApuRegisters {
         self.nr41 = value;
     }
     pub fn write_nr42(&mut self, value: Byte) {
+        // If top 5 bits are all 0, the DAC is to be turned off
+        if (!value) >> 3 == 0x1F {
+            self.ch4_dac_recently_turned_off = true;
+        }
         self.nr42 = value;
     }
     pub fn write_nr43(&mut self, value: Byte) {
@@ -249,6 +261,16 @@ impl ApuRegisters {
         Self::audio_direction(self.nr51, 0x1)
     }
 
+    pub fn channel_1_dac_was_shut_off(&mut self) -> bool {
+        if self.ch1_dac_recently_turned_off {
+            self.ch1_dac_recently_turned_off = false;
+            true
+        }
+        else {
+            false
+        }
+    }
+
     // Channel 2
     pub fn channel_2_length_timer(&self) -> u8 {
         self.nr21 & 0x3F
@@ -276,6 +298,16 @@ impl ApuRegisters {
 
     pub fn channel_2_audio_direction(&self) -> AudioDirection {
         Self::audio_direction(self.nr51, 0x2)
+    }
+
+    pub fn channel_2_dac_was_shut_off(&mut self) -> bool {
+        if self.ch2_dac_recently_turned_off {
+            self.ch2_dac_recently_turned_off = false;
+            true
+        }
+        else {
+            false
+        }
     }
 
     // Channel 3
@@ -349,6 +381,16 @@ impl ApuRegisters {
         Self::audio_direction(self.nr51, 0x8)
     }
 
+    pub fn channel_4_dac_was_shut_off(&mut self) -> bool {
+        if self.ch4_dac_recently_turned_off {
+            self.ch4_dac_recently_turned_off = false;
+            true
+        }
+        else {
+            false
+        }
+    }
+
     // We can load this with zeroes, cpu init handles populating these with post-boot values
     pub fn new() -> ApuRegisters {
         ApuRegisters {
@@ -373,6 +415,9 @@ impl ApuRegisters {
             nr50: 0,
             nr51: 0,
             nr52: 0,
+            ch1_dac_recently_turned_off: false,
+            ch2_dac_recently_turned_off: false,
+            ch4_dac_recently_turned_off: false,
             ch1_to_trigger: false,
             ch2_to_trigger: false,
             ch3_to_trigger: false,
@@ -413,6 +458,9 @@ pub struct ApuRegisters {
     nr50: Byte,
     nr51: Byte,
     nr52: Byte,
+    ch1_dac_recently_turned_off: bool,
+    ch2_dac_recently_turned_off: bool,
+    ch4_dac_recently_turned_off: bool,
     pub ch1_to_trigger: bool,
     pub ch2_to_trigger: bool,
     pub ch3_to_trigger: bool,

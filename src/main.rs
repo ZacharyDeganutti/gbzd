@@ -137,7 +137,7 @@ fn main() {
             // Clock in the time taken as late as possible for a decent sleep timing
             frame_time_end = Instant::now();
             let frame_time_elapsed = frame_time_end - frame_time_start;
-            println!("frame start {:?}, frame end {:?}, duration {:?}", frame_time_start, frame_time_end, frame_time_elapsed);
+            // println!("frame start {:?}, frame end {:?}, duration {:?}", frame_time_start, frame_time_end, frame_time_elapsed);
             if frame_time_elapsed < FRAME_TIME_TOTAL {
                 sleep(FRAME_TIME_TOTAL - frame_time_elapsed);
             }

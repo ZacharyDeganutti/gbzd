@@ -128,7 +128,7 @@ impl DumbFilter {
         let midpoint = increment / 2.0;
         for idx in 0..length {
             let x_i = (idx as f32) * increment + midpoint;
-            weights[idx] = 2.0_f32.powf(10.0 * x_i - 10.0);
+            weights[idx] = 2.0_f32.powf(100.0 * x_i - 100.0);
             sum += weights[idx];
         }
 

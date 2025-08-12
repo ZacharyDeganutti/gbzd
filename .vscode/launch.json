@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["roms/panda.gb"],
+            "args": ["roms/dmg_sound.gb"],
             "cwd": "${workspaceFolder}"
         },
         {

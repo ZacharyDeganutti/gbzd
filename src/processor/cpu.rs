@@ -537,7 +537,9 @@ impl<'a> Cpu<'a> {
             mem.io_registers.write(if_value | 0x4, 0xFF0F);
         }
         // Tick APU noise channel clock
-        mem.apu_state.tick_lfsr(); 
+        for _ in 0..4 {
+            mem.apu_state.tick_lfsr(); 
+        }
     }
 
     pub fn run(&mut self) -> u8 {
@@ -605,7 +607,7 @@ impl<'a> Cpu<'a> {
                 StepResult::Step(cost) => cost
             };
             // Step timers through the cpu cycles consumed on this iteration
-            for _ in 0..(4*cost) {
+            for _ in 0..(cost) {
                 self.tick_timer()
             }
             if self.enable_ime_this_frame {
@@ -625,8 +627,8 @@ impl<'a> Cpu<'a> {
                     return NO_WORK
                 }
             }
-            // Timer needs to keep ticking while halted, so crank out one M-cycle
-            for _ in 0..4 {
+            // Timer needs to keep ticking while halted, so crank out one M-cycle worth
+            for _ in 0..1 {
                 self.tick_timer()
             }
             return NO_WORK

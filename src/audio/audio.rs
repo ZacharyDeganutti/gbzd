@@ -113,8 +113,66 @@ impl<const COUNT: usize> sdl3::audio::AudioCallback<f32> for SampleGenerator<COU
     }
 }
 
+pub struct DumbFilter {
+    ring: VecDeque<f32>,
+    weights: Vec<f32>
+}
+
+impl DumbFilter {
+
+    fn populate_exponential(length: usize) -> Vec<f32> {
+        let mut weights = vec![0.0; length];
+
+        let mut sum: f32 = 0.0;
+        let increment = 1.0 / (length as f32);
+        let midpoint = increment / 2.0;
+        for idx in 0..length {
+            let x_i = (idx as f32) * increment + midpoint;
+            weights[idx] = 2.0_f32.powf(10.0 * x_i - 10.0);
+            sum += weights[idx];
+        }
+
+        for weight in &mut weights {
+            *weight /= sum;
+        }
+
+        weights
+    }
+
+    pub fn new(length: usize) -> Self {
+        DumbFilter {
+            // Contains last <length> samples
+            ring: std::iter::repeat(0.0).take(length).collect(),
+            // Bias sample contribution heavily towards last sample
+            weights: Self::populate_exponential(length)
+        }
+    }
+
+    pub fn update(&mut self, element: f32) {
+        self.ring.pop_front();
+        self.ring.push_back(element);
+    }
+
+    pub fn get(&self) -> f32 {
+        let mut sum: f32 = 0.0;
+        let mut idx = 0;
+        for item in self.ring.as_slices().0 {
+            sum += item * self.weights[idx];
+            idx += 1;
+        }
+        for item in self.ring.as_slices().1 {
+            sum += item * self.weights[idx];
+            idx += 1;
+        }
+
+        return sum as f32
+    }
+}
+
 pub struct NoiseGenerator {
     wave_inbox: Receiver<NoiseWave>,
+    last_wave: Option<NoiseWave>,
+    filter: DumbFilter,
 }
 
 impl sdl3::audio::AudioCallback<f32> for NoiseGenerator {
@@ -129,9 +187,12 @@ impl sdl3::audio::AudioCallback<f32> for NoiseGenerator {
                 Err(_) => break
             };
         };
+        wave = match wave {
+            Some(found) => Some(found),
+            None => self.last_wave.clone()
+        };
 
-
-        match wave {
+        match &wave {
             Some(noise_data) => {
                 let noise_unwrapped = noise_data.volume_samples.lock().unwrap();
                 let noise_slice = noise_unwrapped.as_slices().0;
@@ -139,10 +200,14 @@ impl sdl3::audio::AudioCallback<f32> for NoiseGenerator {
 
                 // Through the power of being lazy, these should both be length 441
                 for idx in 0..noise_slice.len() {
-                    out[idx] = noise_slice[idx];
+                    let unfiltered = noise_slice[idx];
+                    self.filter.update(unfiltered);
+                    out[idx] = self.filter.get();
                 }
                 for idx in 0..noise_slice_2.len() {
-                    out[idx + noise_slice.len()] = noise_slice_2[idx];
+                    let unfiltered = noise_slice_2[idx];
+                    self.filter.update(unfiltered);
+                    out[idx + noise_slice.len()] = self.filter.get();
                 }
             }
             None => {
@@ -151,6 +216,8 @@ impl sdl3::audio::AudioCallback<f32> for NoiseGenerator {
                 }
             }
         }
+
+        self.last_wave = wave;
         
     }
 }
@@ -219,6 +286,8 @@ impl GbAudioSdl {
         let (wave_4_outbox, wave_4_inbox) = channel();
         let channel_4_wave_generator = NoiseGenerator {
             wave_inbox: wave_4_inbox,
+            last_wave: None,
+            filter: DumbFilter::new(20)
         };
         let channel_4_stream = audio_subsystem.open_playback_stream_with_callback(&playback_device, &spec, channel_4_wave_generator).unwrap();
 

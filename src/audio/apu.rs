@@ -78,7 +78,9 @@ impl<'a> Apu<'a> {
         const LENGTH_TIMER_EXPIRY: u8 = 64;
         let mut map = self.memory.borrow_mut();
 
+        const BIT_3_MASK: u8 = 1 << 3;
         const BIT_4_MASK: u8 = 1 << 4;
+        const BIT_5_MASK: u8 = 1 << 5;
 
         // handle global stuff
         // clumsy audio disable handling. todo: make it clear the registers, also probably handle all of it in the memory map with a special handler
@@ -270,7 +272,7 @@ impl<'a> Apu<'a> {
             let channel_1_sweep_increasing = map.apu_state.channel_1_sweep_increasing();
             let channel_1_sweep_step = map.apu_state.channel_1_sweep_step();
             if (self.channel_1_active) && (channel_1_sweep_pace > 0) && ((self.divider_counter % (channel_1_sweep_pace as u32 * 4)) == 0) {
-                if ((self.channel_1_period_current >> 8) >= 0x7FF) || (self.channel_1_period_current == 0) {
+                if ((self.channel_1_period_current) >= 0x7FF) || (self.channel_1_period_current == 0) {
                     // on overflow, cut the channel
                     self.channel_1_active = false;
                 } else if channel_1_sweep_increasing {
@@ -470,7 +472,7 @@ impl<'a> Apu<'a> {
     fn parse_channel_4(&mut self) -> NoiseWave {
         let map = self.memory.borrow_mut();
 
-        let channel_volume_multiplier = Self::mix_volume_multiplier(map.apu_state.left_volume_multiplier(), map.apu_state.right_volume_multiplier(), map.apu_state.channel_4_audio_direction());
+        let channel_volume_multiplier = 2.0 * Self::mix_volume_multiplier(map.apu_state.left_volume_multiplier(), map.apu_state.right_volume_multiplier(), map.apu_state.channel_4_audio_direction());
         const VOLUME_CAP: f32 = 0.05;
 
         let volume: f32 = VOLUME_CAP * channel_volume_multiplier * if !self.channel_4_active {

@@ -7,7 +7,7 @@ use crate::memory_gb::MemoryUnit;
 
 impl MemoryRegion for Divider {
     fn read<T: MemoryUnit>(&mut self, _: Address) -> T {
-        // The divider internally is 2 bytes, but only the top byte is exposed in the address space
+        // The divider internally is 14 bits (16 with bottom 2 ignored), but only the top byte is exposed in the address space
         T::promote((self.data >> 8) as Byte)
     }
 
@@ -19,7 +19,7 @@ impl MemoryRegion for Divider {
 
 impl Divider {
     pub fn increment(&mut self) -> () {
-        self.data = self.data.wrapping_add(1);
+        self.data = self.data.wrapping_add(1 << 2);
     }
 
     pub fn full_read(&mut self) -> Word {

@@ -627,8 +627,10 @@ impl<'a> Cpu<'a> {
                     return NO_WORK
                 }
             }
-            // Timer needs to keep ticking while halted, so crank out one M-cycle worth
-            for _ in 0..1 {
+            // Timer needs to keep ticking while halted, so crank out two M-cycles worth
+            // No clue why it's two per halt tick, but this is probably just covering up
+            // some bug where I ought to be ticking this elsewhere instead.
+            for _ in 0..2 {
                 self.tick_timer()
             }
             return NO_WORK

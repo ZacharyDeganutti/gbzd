@@ -129,7 +129,6 @@ impl<'a> Apu<'a> {
             self.channel_1_sweep_pace_current = map.apu_state.channel_1_sweep_pace();
             // Activate channel if DAC is alive
             self.channel_1_active = map.apu_state.channel_1_dac_enabled();
-            // println!("TRIGGER CH1");
         }
 
         // update ch1 period if it was overwritten
@@ -282,7 +281,10 @@ impl<'a> Apu<'a> {
                 let new_nr13 = (self.channel_1_period_current & 0xFF) as u8;
                 let new_nr14 = (map.apu_state.read_nr14() & 0xC0) | ((self.channel_1_period_current >> 8) as u8 & 0b111);
                 map.apu_state.write_nr13(new_nr13);
+                // Writing back nr14 in this way should not retrigger the channel so a little compensation is needed
+                let saved_trigger_status = map.apu_state.ch1_to_trigger;
                 map.apu_state.write_nr14(new_nr14);
+                map.apu_state.ch1_to_trigger = saved_trigger_status;
             }
             
             // Adjust length timers (every 2 div-apu ticks)
@@ -376,8 +378,6 @@ impl<'a> Apu<'a> {
             0b10 => DutyCycle::Half,
             _    => DutyCycle::ThreeQuarter
         };
-
-        // TODO: Have length set volume to 0 if it's at 64
 
         let frequency = 131072.0 / (2048.0 - self.channel_1_period_current as f32);
 

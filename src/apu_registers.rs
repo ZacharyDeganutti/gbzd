@@ -185,13 +185,13 @@ impl ApuRegisters {
 
     // Left output, ~0-1 range. Value is always greater than 0
     pub fn left_volume_multiplier(&self) -> f32 {
-        let raw_volume = ((self.nr52 & 0x70) >> 4) + 1;
+        let raw_volume = ((self.nr50 & 0x70) >> 4) + 1;
         raw_volume as f32 / 8.0
     } 
 
     // Right output, ~0-1 range. Value is always greater than 0
     pub fn right_volume_multiplier(&self) -> f32 {
-        let raw_volume = (self.nr52 & 0x7) + 1;
+        let raw_volume = (self.nr50 & 0x7) + 1;
         raw_volume as f32 / 8.0
     } 
 

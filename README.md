@@ -13,9 +13,11 @@ Yet another Gameboy emulator.
 
 * Learn some Rust with a real project
 
-* Brush up on microcontroller fundamentals
+* Brush up on 'bare-metal' programming fundamentals
 
 * Scratch the retro-computing itch
+
+* Try some audio programming
 
 ## Testing
 
@@ -35,10 +37,11 @@ Yet another Gameboy emulator.
     * Only a PS5 Dualsense has been tested, but most Windows compatible controllers should work
 
 ## Design principles and explanation of intended inaccuracies
-GBZD is a single-threaded application with 3 noteworthy components
+GBZD is a single-threaded application with 4 noteworthy components
 * Abstracted memory map
 * CPU
-* PPU
+* PPU (Picture Processing Unit)
+* APU (Audio Processing Unit)
 
 At a high level, there's a simple load balancing heuristic that decides whether whether the CPU or PPU runs next based on how much 'debt' has been accumulated by one side relative to the other.
 
@@ -67,11 +70,13 @@ This implementation uses a simple model for background and sprite rendering. It 
 
 The PPU interface exposes 3 methods. One is the run method, which churns through the state machine in little increments and reports how long it spent doing so for debt tracking and synchronization. Another gets a handle to the frontbuffer of the double buffered render target. The last one queries the PPU if a new frame is ready since the last time checked.
 
+#### APU
+The APU implementation aims to match fairly closely to how the chip works in the actual system as described in the Pandocs. It's functionally just a pile of clocks and timers that can be configured via the CPU poking a bucket of registers, and continuously updates said bucket of registers based on its internal state. The system has 4 channels: Square pulse with pitch + volume sweep capability, square pulse with volume sweep, a custom waveform channel, and a noise channel. The design is such that at any time, any of these four channels can be queried to retrieve a waveform that reflects the current state of the APU registers. In the broader scope of the emulator's operation, the channels are polled every time the CPU ticks to generate 4 waves. These waves are conveyed to a separate audio thread via atomic queues, on which a number of callbacks equal to the number of channels are periodically called to fill buffers of samples which generate the audio. These callbacks fill their buffers according to the most recently polled wave (as of the time that the callback was called). The audio thread's record of the most recent wave tracks the phase of the wave externally to the APU, which is a liberty taken to make implementation easier. Between the compromise of updating the wave less than instantaneously and the phase not being handled internal to the APU, some of the hackier audio effects like Pikachu's cry in Pokemon Yellow will not play correctly, though these cases are uncommon.
+
 #### Bonus: Input
 Another device that owns a memory map. This one is defined by a generic wrapper around all possible Gameboy inputs. This wrapper can be constructed by providing one or more implementations of the InputDevice interface, bridging real input devices such as game controllers to the Gameboy's joypad register interface and handling any interrupts that should be raised. Input is polled.
 
 ## Future feature roadmap
-* Audio playback (Lack of audio is seriously unsatisfying!)
 * More robust UI and display
     * Scaling of display output to support non-native resolutions
     * Post-processing to replicate low response time LCD ghosting and other effects

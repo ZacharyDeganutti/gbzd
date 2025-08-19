@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{cart::Cart, input::{self, Joypad}, special_registers::Timer};
+use crate::{apu_registers::ApuRegisters, cart::Cart, input::{self, Joypad}, timer::Timer};
 
 pub type Byte = u8;
 pub type Word = u16;
@@ -194,6 +194,7 @@ pub struct MemoryMapData {
     cart: Cart,
     timer: Timer,
     joypad: Joypad,
+    apu_state: ApuRegisters,
     vram: [Byte; EXRAM_START - VRAM_START],
     work_ram: [Byte; WRAM_S_START - WRAM_START],
     work_ram_swappable: [Byte; ECHORAM_START - WRAM_S_START],
@@ -209,6 +210,7 @@ pub struct MemoryMap<'a> {
     cart: &'a mut Cart,
     pub timer: &'a mut Timer,
     pub joypad: &'a mut Joypad,
+    pub apu_state: &'a mut ApuRegisters,
     vram: SimpleRegion<'a>,
     work_ram: SimpleRegion<'a>,
     work_ram_swappable: SimpleRegion<'a>,
@@ -218,6 +220,8 @@ pub struct MemoryMap<'a> {
     pub io_registers: SimpleRegion<'a>,
     hram: SimpleRegion<'a>,
     ie: SimpleRegion<'a>,
+    // special register traps to account for weird side effects
+    pub div_reset: bool,
 }
 
 // TODO: Override get_bank to implement mapped addressing against a structure full of MemoryRegions
@@ -248,6 +252,70 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             }
             else if address == 0xFF07 {
                 T::promote(self.timer.read_control())
+            }
+            // APU register reads
+            else if address == 0xFF10 {
+                T::promote(self.apu_state.read_nr10())
+            }
+            else if address == 0xFF11 {
+                T::promote(self.apu_state.read_nr11())
+            }
+            else if address == 0xFF12 {
+                T::promote(self.apu_state.read_nr12())
+            }
+            else if address == 0xFF13 {
+                T::promote(self.apu_state.read_nr13())
+            }
+            else if address == 0xFF14 {
+                T::promote(self.apu_state.read_nr14())
+            }
+            else if address == 0xFF16 {
+                T::promote(self.apu_state.read_nr21())
+            }
+            else if address == 0xFF17 {
+                T::promote(self.apu_state.read_nr22())
+            }
+            else if address == 0xFF18 {
+                T::promote(self.apu_state.read_nr23())
+            }
+            else if address == 0xFF19 {
+                T::promote(self.apu_state.read_nr24())
+            }
+            else if address == 0xFF1A {
+                T::promote(self.apu_state.read_nr30())
+            }
+            else if address == 0xFF1B {
+                T::promote(self.apu_state.read_nr31())
+            }
+            else if address == 0xFF1C {
+                T::promote(self.apu_state.read_nr32())
+            }
+            else if address == 0xFF1D {
+                T::promote(self.apu_state.read_nr33())
+            }
+            else if address == 0xFF1E {
+                T::promote(self.apu_state.read_nr34())
+            }
+            else if address == 0xFF20 {
+                T::promote(self.apu_state.read_nr41())
+            }
+            else if address == 0xFF21 {
+                T::promote(self.apu_state.read_nr42())
+            }
+            else if address == 0xFF22 {
+                T::promote(self.apu_state.read_nr43())
+            }
+            else if address == 0xFF23 {
+                T::promote(self.apu_state.read_nr44())
+            }
+            else if address == 0xFF24 {
+                T::promote(self.apu_state.read_nr50())
+            }
+            else if address == 0xFF25 {
+                T::promote(self.apu_state.read_nr51())
+            }
+            else if address == 0xFF26 {
+                T::promote(self.apu_state.read_nr52())
             }
             else {
                 self.io_registers.read(address)
@@ -307,6 +375,7 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
                 print!("{}", a);
             }
             else if address == 0xFF04 {
+                self.div_reset = true;
                 self.timer.write_divider(value.demote())
             }
             else if address == 0xFF05 {
@@ -318,6 +387,73 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
             else if address == 0xFF07 {
                 self.timer.write_control(value.demote())
             }
+            // APU registers.
+            // These are split out because writing to APU registers can result in a multitude
+            // of state changes depending on the register. Some features/behaviors may be omitted
+            else if address == 0xFF10 {
+                self.apu_state.write_nr10(value.demote());
+            }
+            else if address == 0xFF11 {
+                self.apu_state.write_nr11(value.demote());
+            }
+            else if address == 0xFF12 {
+                self.apu_state.write_nr12(value.demote());
+            }
+            else if address == 0xFF13 {
+                self.apu_state.write_nr13(value.demote());
+            }
+            else if address == 0xFF14 {
+                self.apu_state.write_nr14(value.demote());
+            }
+            else if address == 0xFF16 {
+                self.apu_state.write_nr21(value.demote());
+            }
+            else if address == 0xFF17 {
+                self.apu_state.write_nr22(value.demote());
+            }
+            else if address == 0xFF18 {
+                self.apu_state.write_nr23(value.demote());
+            }
+            else if address == 0xFF19 {
+                self.apu_state.write_nr24(value.demote());
+            }
+            else if address == 0xFF1A {
+                self.apu_state.write_nr30(value.demote());
+            }
+            else if address == 0xFF1B {
+                self.apu_state.write_nr31(value.demote());
+            }
+            else if address == 0xFF1C {
+                self.apu_state.write_nr32(value.demote());
+            }
+            else if address == 0xFF1D {
+                self.apu_state.write_nr33(value.demote());
+            }
+            else if address == 0xFF1E {
+                self.apu_state.write_nr34(value.demote());
+            }
+            else if address == 0xFF20 {
+                self.apu_state.write_nr41(value.demote());
+            }
+            else if address == 0xFF21 {
+                self.apu_state.write_nr42(value.demote());
+            }
+            else if address == 0xFF22 {
+                self.apu_state.write_nr43(value.demote());
+            }
+            else if address == 0xFF23 {
+                self.apu_state.write_nr44(value.demote());
+            }
+            else if address == 0xFF24 {
+                self.apu_state.write_nr50(value.demote());
+            }
+            else if address == 0xFF25 {
+                self.apu_state.write_nr51(value.demote());
+            }
+            else if address == 0xFF26 {
+                self.apu_state.write_nr52(value.demote());
+            }
+            // DMA
             else if address == 0xFF46 {
                 self.dma(value.demote())
             }
@@ -357,11 +493,13 @@ impl<'a> MemoryRegion for MemoryMap<'a> {
 
 impl<'a> MemoryMap<'a> {
     pub fn allocate(cart: Cart, joypad: Joypad) -> MemoryMapData {
-        let timer: Timer = Timer::new() ;
+        let timer: Timer = Timer::new();
+        let apu_state: ApuRegisters = ApuRegisters::new();
         MemoryMapData { 
             cart,
             timer,
             joypad,
+            apu_state,
             vram: [0; EXRAM_START - VRAM_START],
             work_ram: [0; WRAM_S_START - WRAM_START],
             work_ram_swappable: [0; ECHORAM_START - WRAM_S_START],
@@ -379,6 +517,7 @@ impl<'a> MemoryMap<'a> {
             cart: &mut data.cart,
             timer: &mut data.timer,
             joypad: &mut data.joypad,
+            apu_state: &mut data.apu_state,
             vram: SimpleRegion { start: VRAM_START as Address, data: &mut data.vram },
             work_ram: SimpleRegion { start: WRAM_START as Address, data: &mut data.work_ram },
             work_ram_swappable: SimpleRegion { start: WRAM_S_START as Address, data: &mut data.work_ram_swappable },
@@ -388,6 +527,8 @@ impl<'a> MemoryMap<'a> {
             io_registers: SimpleRegion { start: IOREGS_START as Address, data: &mut data.io_registers },
             hram: SimpleRegion { start: HRAM_START as Address, data: &mut data.hram },
             ie: SimpleRegion { start: IE_START as Address, data: &mut data.ie },
+            // Magic registers
+            div_reset: true,
         }
     }
 

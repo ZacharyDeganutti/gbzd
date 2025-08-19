@@ -242,33 +242,35 @@ impl<'a> Ppu<'a> {
             let lcdc: Byte = memory.read(LCDC_ADDRESS);
             (lcdc & (1 << 7)) > 0
         };
-        // If the LCD is disabled, refresh all the state and boot back control
+
+        // If the LCD is disabled, refresh all the state, report PPU as disabled in STAT, and boot back control
         if !running {
             self.current_mode = RenderMode::VBlank;
             self.current_dot = DOT_MAX;
             self.front_buffer_base = 0;
             self.frame_ready = false;
-            self.internal_window_line_counter = 0;
+            self.internal_window_line_counter = 1;
+
+            let mut memory = self.system_memory.borrow_mut();
+            let old_stat: Byte = memory.read(STAT_ADDRESS);
+            let stat = old_stat & !(0x3);
+            memory.write(stat, STAT_ADDRESS);
             return 1
         }
+        
         let dots_spent = match self.current_mode {
+            // Do chunks of the current mode on any given PPU iteration
             RenderMode::OAMScan => {
-                // Scan the whole OAM in one shot since coroutines aren't 'real' yet
-                // and I really don't want to implement that without those unless I really have to
                 self.oam_scan_results.clear();
                 
                 const OAM_DOT_GRANULARITY: u32 = OAM_SCAN_TIME/40;
                 self.current_dot += OAM_DOT_GRANULARITY;
                 if (self.current_dot % DOTS_PER_LINE) >= OAM_SCAN_TIME {
                     self.oam_scan_results = self.scan_oam();
-                    // println!("oam_scan_results length {}", self.oam_scan_results.len());
                 }
                 (OAM_DOT_GRANULARITY) as i16
             }
             RenderMode::PixelDraw => {
-                // Actually granular timing is for nerds, let's just rip out whole modes at once
-                // This could certainly make things funky within any line,
-                // but SURELY this should be good enough and things will probably mostly shake out
                 const PIXEL_DRAW_GRANULARITY: u32 = PIXEL_DRAW_TIME/4;
                 let line_number = self.current_dot / DOTS_PER_LINE;
                 self.current_dot += PIXEL_DRAW_GRANULARITY;
@@ -288,7 +290,6 @@ impl<'a> Ppu<'a> {
             RenderMode::VBlank => {
                 if self.current_dot == DOT_MAX - DOTS_PER_LINE {
                     self.swap_buffers();
-                    //self.output_screen();
                     self.internal_window_line_counter = 0;
                 }
                 const VBLANK_TIME: u32 = DOTS_PER_LINE/19;
@@ -321,7 +322,8 @@ impl<'a> Ppu<'a> {
 
         if (self.current_dot % DOTS_PER_LINE) == 0 {
             // We have this separate flag to check for a rising edge on this condition
-            ly_eq_lyc = ly == lyc;
+            // The check on lyc 0 and ly 153 is to account for a hardware quirk
+            ly_eq_lyc = (ly == lyc) || ((lyc == 0) && (ly == 153));
             // println!("ly {}, {}", ly, ly_eq_lyc);
         }
 
@@ -377,9 +379,7 @@ impl<'a> Ppu<'a> {
         // Update the LY=LYC check and mode in the STAT register. 
         // Probably not enough to be accurate for CPU changes to LYC
         // Might be worth trapping LYC on the CPU to cover both ends
-
-        //println!("ly {}", ly);
-        let ly_eq_lyc_flag = (if lyc == ly { 1 } else { 0 }) << 2;
+        let ly_eq_lyc_flag = (if ly_eq_lyc { 1 } else { 0 }) << 2;
         let mode_number_flag = self.current_mode.mode_number();
         let old_stat: Byte = memory.read(STAT_ADDRESS);
         let stat = (old_stat & !(0x7)) | (ly_eq_lyc_flag | mode_number_flag);

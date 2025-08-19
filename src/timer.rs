@@ -7,7 +7,7 @@ use crate::memory_gb::MemoryUnit;
 
 impl MemoryRegion for Divider {
     fn read<T: MemoryUnit>(&mut self, _: Address) -> T {
-        // The divider internally is 2 bytes, but only the top byte is exposed in the address space
+        // The divider internally is 14 bits (16 with bottom 2 ignored), but only the top byte is exposed in the address space
         T::promote((self.data >> 8) as Byte)
     }
 
@@ -19,7 +19,7 @@ impl MemoryRegion for Divider {
 
 impl Divider {
     pub fn increment(&mut self) -> () {
-        self.data = self.data.wrapping_add(1);
+        self.data = self.data.wrapping_add(1 << 2);
     }
 
     pub fn full_read(&mut self) -> Word {
@@ -47,19 +47,26 @@ impl Timer {
     }
 
     pub fn write_divider(&mut self, value: Byte) {
-        self.divider.write(value, 0xFF04)
+        // Sometimes this can force a timer interrupt trigger when there's a falling edge
+        let pre_tick = self.divider.full_read();
+        self.divider.write(value, 0xFF04);
+        let post_tick = self.divider.full_read();
+        let delta = pre_tick ^ post_tick;
+        let timer_mask = self.control_mask();
+        if (timer_mask & delta & pre_tick) > 0 {
+            self.overflowing = true;
+        }
     }
     pub fn write_counter(&mut self, value: Byte) {
         self.counter = value
     }
     pub fn write_modulo(&mut self, value: Byte) {
-        self.modulo = value
+        self.modulo = value;
     }
     pub fn write_control(&mut self, value: Byte) {
-        self.control = value & 0x7
+        self.control = value & 0x7;
     }
 
-    // TODO: Double check if reference shenanigans are handled correctly
     pub fn tick(&mut self) -> bool {
         let mut fire_interrupt_ready_status: bool = false;
         let pre_tick = self.divider.full_read();

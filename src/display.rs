@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
-use minifb::{Icon, Key, ScaleMode, Window, WindowOptions};
-
+use minifb::{Icon, ScaleMode, Window, WindowOptions};
 
 pub struct DisplayMiniFB {
     pub width: usize,
@@ -25,9 +24,6 @@ impl DisplayMiniFB {
             },
         )
         .expect("Unable to create the window");
-        
-        // window.set_target_fps(60);
-        window.limit_update_rate(None);
 
         window.set_icon(Icon::from_str("images/ziti_icon.ico").unwrap());
 
@@ -40,5 +36,9 @@ impl DisplayMiniFB {
 
     pub fn update(&mut self, color_buffer: &Vec<u32>) {
         self.window.update_with_buffer(color_buffer, self.width, self.height).unwrap();
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.window.is_open()
     }
 }

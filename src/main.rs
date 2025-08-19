@@ -3,9 +3,14 @@ mod processor {
     pub mod ops;
     pub mod execute;
 }
+mod audio {
+    pub mod audio;
+    pub mod apu;
+}
 mod memory_gb;
 mod cart;
-mod special_registers;
+mod timer;
+mod apu_registers;
 mod ppu;
 mod display;
 mod input;
@@ -14,6 +19,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use audio::audio::{DutyCycle, GbAudioSdl, SquareWave, SampleWave};
+use audio::apu::{Apu};
 use display::DisplayMiniFB;
 
 use crate::processor::cpu::*;
@@ -21,6 +28,7 @@ use crate::ppu::*;
 use crate::input::*;
 
 const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740);
+//const FRAME_TIME_TOTAL: Duration = Duration::from_micros(16_740 / 2);
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -34,6 +42,7 @@ fn main() {
     let system_memory = Rc::new(RefCell::new(memory_gb::MemoryMap::new(&mut system_memory_data)));
     let mut cpu = Cpu::new(system_memory.clone());
     let mut ppu = Ppu::new(system_memory.clone());
+    let mut apu = Apu::new(system_memory.clone());
     
     let controllers: Vec<Box<dyn InputDevice>> = {
         let pads = GilControllers::enumerate_gilrs_controllers();
@@ -43,7 +52,24 @@ fn main() {
     };
     
     let mut input_handler = InputHandler::new(controllers, system_memory.clone());
-    //let mut input_handler = InputH
+
+    let sdl_context = sdl3::init().unwrap();
+    let mut audio_player = GbAudioSdl::new(&sdl_context);
+
+    let default_square_wave = SquareWave {
+        duty_cycle: DutyCycle::Half,
+        volume: 0.00,
+        frequency: 440.0,
+    };
+    let default_sample_wave = SampleWave {
+        volume_samples: [0.0; 32],
+        frequency: 440.0,
+    };
+    audio_player.start_channel_1(default_square_wave);
+    audio_player.start_channel_2(default_square_wave);
+    audio_player.start_channel_3(default_sample_wave);
+    audio_player.start_channel_4();
+
     let mut display = DisplayMiniFB::new();
 
     // Debt represents the timing balance between cpu and ppu.
@@ -57,12 +83,26 @@ fn main() {
     let mut frame_time_end = Instant::now();
 
     loop {
+        if !display.is_open() {
+            std::process::exit(0);
+        }
+
+        let mut dots_elapsed: u16 = 0;
+        // Run CPU or PPU
         if debt <= 0 && !cpu_locked {
-            let payment = (cpu.run() * 4) as i16;
-            debt += payment;
-            if payment == 0 {
+            dots_elapsed = (cpu.run() * 4) as u16;
+            debt += dots_elapsed as i16;
+            if dots_elapsed == 0 {
                 cpu_locked = true;
             }
+
+            // Update APU after CPU because it operates at a finer dot granularity.
+            // CPU/PPU/APU should provide the illusion of operating in parallel
+            let (ch_1_wave, ch_2_wave, ch_3_wave, ch_4_wave) = apu.update_waves();
+            audio_player.update_channel_1(ch_1_wave);
+            audio_player.update_channel_2(ch_2_wave);
+            audio_player.update_channel_3(ch_3_wave);
+            audio_player.update_channel_4(ch_4_wave);
         }
         else {
             if cpu_locked {
@@ -70,9 +110,11 @@ fn main() {
                 cpu_locked = false
             }
             else {
-                debt -= ppu.run();
+                dots_elapsed = ppu.run() as u16;
+                debt -= dots_elapsed as i16;
             }
         }
+        // println!("debt: {}", debt);
         
         // Things that happen once per frame go here
         if ppu.frame_is_ready() {
@@ -87,7 +129,7 @@ fn main() {
                     }
                 })
                 .collect::<Vec<u32>>();
-            // println!("{:x?}", color_buffer);
+
             display.update(&color_buffer);
             // Poll input for the next frame (first frame will always have default values, but that's fine)
             input_handler.poll();
@@ -100,6 +142,10 @@ fn main() {
                 sleep(FRAME_TIME_TOTAL - frame_time_elapsed);
             }
             frame_time_start = Instant::now();
+            // misc debug logging
+            // println!("{:?}", ch_1_wave);
+            //audio_player.update_channel_1(ch_1_wave);
+            //print!("debt: {} \n", debt);
         }
     }
 }
